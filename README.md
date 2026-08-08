@@ -9,8 +9,10 @@ It runs entirely locally and is **deterministic**: the same inventory always pro
 tiers and findings, so an assessment is explainable to an engineer and defensible to an auditor.
 No LLM is in the verdict path.
 
-> Non-human identities already outnumber human ones by [an order of magnitude or more](https://owasp.org/www-project-non-human-identities-top-10/)
-> in most enterprises, and **AI agents** are the fastest-growing class — each one a privileged,
+See **[PITCH.md](PITCH.md)** for the why, with sourced market data.
+
+> Machine identities now outnumber human ones by [more than 82:1](https://www.cyberark.com/press/machine-identities-outnumber-humans-by-more-than-80-to-1-new-report-exposes-the-exponential-threats-of-fragmented-identity-security/)
+> (CyberArk, 2025), and **AI agents** are the fastest-growing class — each one a privileged,
 > often autonomous identity. `nhi-scan` treats the agent as what it is: an NHI that needs an
 > owner, least privilege, short-lived credentials, and a tier.
 
