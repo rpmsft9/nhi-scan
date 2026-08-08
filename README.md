@@ -9,7 +9,10 @@ It runs entirely locally and is **deterministic**: the same inventory always pro
 tiers and findings, so an assessment is explainable to an engineer and defensible to an auditor.
 No LLM is in the verdict path.
 
-See **[PITCH.md](PITCH.md)** for the why, with sourced market data.
+See **[PITCH.md](PITCH.md)** for the why, with sourced market data — and
+**[A Control Framework for Non-Human & Agentic Identity](docs/nhi-agentic-control-framework.md)**
+for the control model this tool implements (30 controls mapped to OWASP NHI Top 10, NIST AI RMF,
+CSF 2.0, and 800-53).
 
 > Machine identities now outnumber human ones by [more than 82:1](https://www.cyberark.com/press/machine-identities-outnumber-humans-by-more-than-80-to-1-new-report-exposes-the-exponential-threats-of-fragmented-identity-security/)
 > (CyberArk, 2025), and **AI agents** are the fastest-growing class — each one a privileged,
