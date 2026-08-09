@@ -1,0 +1,47 @@
+{
+  "_readme": "Copy this file, delete the fields starting with underscore, and fill in one object per non-human identity under 'identities'. Only 'id' and 'name' are required; every other field has a safe default, so a partial inventory still assesses. The more you fill in, the sharper the risk tiering. Run with:  nhi-scan scan your-inventory.json",
+  "_allowed_values": {
+    "type": ["service_account", "api_key", "oauth_app", "service_principal", "managed_identity", "workload_identity", "ci_cd_token", "pat", "webhook", "secret", "ai_agent"],
+    "privilege": ["admin", "privileged", "scoped", "read_only"],
+    "credential": ["static_secret", "api_key", "certificate", "federated", "managed", "short_lived_token", "none"],
+    "secret_storage": ["vault", "env", "plaintext", "none"],
+    "environment": ["prod", "nonprod", "dev", "sandbox"],
+    "exposure": ["internet", "external_partner", "internal"],
+    "owner": "email/team string, or null if orphaned (null is flagged)",
+    "last_rotated_days": "integer days since the credential was rotated, or null if never/unknown",
+    "last_used_days": "integer days since last activity, or null if unknown",
+    "scopes": "list of permission strings; '*' or trailing ':*' is treated as a wildcard",
+    "autonomous": "true for an AI agent that acts without per-action human approval",
+    "third_party": "true if issued to / operated by an outside vendor",
+    "human_used": "true if a human logs in interactively with this identity",
+    "shared_across_env": "true if the same identity/credential is used in both prod and non-prod",
+    "used_by": "list of workloads sharing this identity; more than one is flagged as reuse"
+  },
+  "identities": [
+    {
+      "_note": "MINIMAL record — only id and name are required. Everything else falls back to a conservative default.",
+      "id": "svc-REPLACE-ME",
+      "name": "human-readable-name"
+    },
+    {
+      "_note": "FULL record — every field populated. Use this as your copy-and-edit template.",
+      "id": "svc-payments-prod",
+      "name": "payments-batch-runner",
+      "type": "service_account",
+      "owner": "team-or-person@example.com",
+      "environment": "prod",
+      "privilege": "privileged",
+      "credential": "static_secret",
+      "secret_storage": "vault",
+      "last_rotated_days": 120,
+      "last_used_days": 2,
+      "exposure": "internal",
+      "scopes": ["payments:read", "payments:write"],
+      "autonomous": false,
+      "third_party": false,
+      "human_used": false,
+      "shared_across_env": false,
+      "used_by": ["payments-batch"]
+    }
+  ]
+}

@@ -99,6 +99,25 @@ a safe, conservative posture, so a partial inventory still assesses.
 | `scopes` | list of strings (`*` / `:*` = wildcard) | NHI5 |
 | `autonomous`, `third_party`, `human_used`, `shared_across_env`, `used_by` | booleans / list | agent rules, NHI3/8/9/10 |
 
+### Preparing your inventory
+
+Copy [`examples/template-inventory.json`](examples/template-inventory.json) — it's an annotated
+template with the allowed values inline and both a minimal and a fully-populated record. Then
+build one record per identity by pulling from where your NHIs actually live:
+
+| Source | What to pull |
+| --- | --- |
+| Entra / Okta / Ping | service principals, enterprise & OAuth apps, workload identities |
+| AWS / Azure / GCP | IAM users & access keys, roles, service accounts, managed identities |
+| Secrets managers / vaults | stored secrets and their rotation age |
+| GitHub / GitLab / CI | PATs, deploy tokens, pipeline credentials |
+| Agent platforms (e.g. Entra Agent ID) | your AI agents — set `type: ai_agent` and `autonomous` |
+
+**Start minimal, then enrich.** Begin with the fields you can get cheaply — `id`, `name`, `type`,
+`owner`, `environment`, `privilege` — run a scan, then add `credential`, `last_rotated_days`, and
+`scopes` to sharpen the results. Missing fields fall back to conservative defaults rather than
+failing, so a partial inventory still produces a useful report.
+
 ## Risk policy
 
 Tiering rules live in [`nhiscan/tiering.py`](nhiscan/tiering.py); OWASP checks in
