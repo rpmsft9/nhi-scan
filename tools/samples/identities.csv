@@ -1,0 +1,4 @@
+id,name,type,owner,environment,privilege,credential,secret_storage,last_rotated_days,last_used_days,exposure,scopes,autonomous,third_party,human_used,shared_across_env,used_by
+svc-billing,billing-runner,service_account,billing@bank.example,prod,privileged,static_secret,vault,120,3,internal,billing:read;billing:write,false,false,false,false,billing-app
+agent-support,support-ai-agent,ai_agent,cx@bank.example,prod,privileged,static_secret,env,20,0,internal,tickets:read;tickets:write;accounts:*,true,false,false,false,
+key-legacy,legacy-integration-key,api_key,,prod,admin,api_key,plaintext,,300,internet,*,false,true,false,false,

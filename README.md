@@ -118,6 +118,24 @@ build one record per identity by pulling from where your NHIs actually live:
 `scopes` to sharpen the results. Missing fields fall back to conservative defaults rather than
 failing, so a partial inventory still produces a useful report.
 
+### Generate the inventory automatically
+
+For anything past a pilot, don't hand-write the file — **generate it** from your environment with
+the [collectors](tools/collectors/README.md). Each is a read-only transform (source API JSON in →
+nhi-scan JSON out) for **Entra ID, AWS IAM, GCP service accounts, and CSV exports**:
+
+```bash
+az ad sp list --all -o json | python -m tools.collectors.entra --tenant <TENANT> > entra-nhi.json
+python -m tools.collectors.aws aws-bundle.json > aws-nhi.json
+python -m tools.collectors.gcp gcp-accounts.json > gcp-nhi.json
+python -m tools.collectors.csv_import identities.csv > csv-nhi.json
+# merge every source, then scan
+jq -s 'add' *-nhi.json > inventory.json && nhi-scan scan inventory.json
+```
+
+Run the collect → merge → scan pipeline on a schedule to keep the inventory live. See the
+[collectors guide](tools/collectors/README.md) for the read-only permissions and gather scripts.
+
 ## Risk policy
 
 Tiering rules live in [`nhiscan/tiering.py`](nhiscan/tiering.py); OWASP checks in
