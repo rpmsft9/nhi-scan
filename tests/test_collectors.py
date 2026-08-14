@@ -4,7 +4,7 @@ from pathlib import Path
 
 from nhiscan.ingest import load_fleet
 from nhiscan.scan import scan
-from tools.collectors import aws, csv_import, entra, gcp
+from tools.collectors import aws, csv_import, entra, gcp, mcp
 from tools.collectors.common import KNOWN_FIELDS, days_since
 
 SAMPLES = Path(__file__).resolve().parents[1] / "tools" / "samples"
@@ -69,6 +69,33 @@ def test_gcp_transform():
 
 
 # --- CSV ------------------------------------------------------------------------------
+def test_mcp_collector_builds_agent_tools():
+    recs = mcp.transform(_load("mcp-agents.json"))
+    assert _only_known(recs)
+    by_id = {r["id"]: r for r in recs}
+    agent = by_id["agent-collections"]
+    assert agent["type"] == "ai_agent"
+    assert agent["autonomous"] is True
+    assert agent["tools"] == ["crm.lookup", "crm.update", "email.send"]  # server-namespaced
+    analyst = by_id["agent-analyst"]
+    # flat tools + server tools merge, de-duped, order preserved
+    assert analyst["tools"] == ["sql.read_only", "warehouse.query"]
+
+
+def test_mcp_output_scans(tmp_path):
+    recs = mcp.transform(_load("mcp-agents.json"))
+    p = tmp_path / "agents.json"
+    p.write_text(json.dumps(recs), encoding="utf-8")
+    result = scan(load_fleet(p))
+    assert result.total == 2  # both agents assessed
+
+
+def test_csv_parses_tools_column():
+    text = "id,name,type,tools\nag1,agent-one,ai_agent,crm.lookup;payments.refund\n"
+    rec = csv_import.transform_csv_text(text)[0]
+    assert rec["tools"] == ["crm.lookup", "payments.refund"]
+
+
 def test_csv_transform():
     recs = csv_import.transform_csv_text((SAMPLES / "identities.csv").read_text(encoding="utf-8"))
     assert len(recs) == 3

@@ -1,0 +1,32 @@
+{
+  "agents": [
+    {
+      "id": "agent-collections",
+      "name": "collections-ai-agent",
+      "owner": "cx-automation@bank.example",
+      "environment": "prod",
+      "privilege": "privileged",
+      "credential": "static_secret",
+      "autonomous": true,
+      "scopes": ["accounts:read", "accounts:update", "ledger:*"],
+      "servers": [
+        { "name": "crm", "tools": ["lookup", "update"] },
+        { "name": "email", "tools": ["send"] }
+      ]
+    },
+    {
+      "id": "agent-analyst",
+      "name": "reporting-ai-agent",
+      "owner": "data-eng@bank.example",
+      "environment": "prod",
+      "privilege": "scoped",
+      "credential": "federated",
+      "autonomous": false,
+      "scopes": ["reports:read"],
+      "tools": ["sql.read_only"],
+      "servers": [
+        { "name": "warehouse", "tools": ["query"] }
+      ]
+    }
+  ]
+}

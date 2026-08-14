@@ -73,6 +73,30 @@ python -m tools.collectors.gcp gcp-accounts.json > gcp-nhi.json
 A user-managed key is treated as a long-lived static credential; accounts without one are
 `managed`.
 
+## Agent tool manifests (agent *reach*)
+
+An AI agent's reach — the tools/connectors it can invoke — can grow without touching privilege,
+credential age, or owner, so it needs to be inventoried as a first-class input (the `tools` field)
+and diffed between scans (`nhi-scan diff`). The `mcp` collector builds an agent record from its
+connected servers/tools:
+
+```bash
+python -m tools.collectors.mcp mcp-agents.json > agents-nhi.json
+```
+
+Input is an agent-to-servers manifest (see [`../samples/mcp-agents.json`](../samples/mcp-agents.json));
+server tools are namespaced `<server>.<tool>`. **Where to get the manifest:**
+
+| Source | What to pull |
+| --- | --- |
+| MCP client/host config | the servers each agent is wired to; tool names from each server's `tools/list` |
+| Agent framework (LangChain / Semantic Kernel / AutoGen) | the agent's registered tool/function list |
+| Copilot Studio / Microsoft Agent 365 / Entra Agent ID | the agent's registered plugins, connectors, and actions |
+
+Snapshot the manifest on each run, then `nhi-scan diff before.json after.json` flags added/removed
+tools — turning "the agent got a new connector" from an invisible change into a diffable one.
+(The CSV collector also accepts a `tools` column: separate values with `;`, `|`, or `,`.)
+
 ## CSV export (no cloud CLI needed)
 
 Export a spreadsheet whose header row uses nhi-scan field names (see

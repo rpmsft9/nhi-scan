@@ -21,7 +21,7 @@ from .common import KNOWN_FIELDS, emit, record
 
 _INT_FIELDS = {"last_rotated_days", "last_used_days"}
 _BOOL_FIELDS = {"autonomous", "third_party", "human_used", "shared_across_env"}
-_LIST_FIELDS = {"scopes", "used_by"}
+_LIST_FIELDS = {"scopes", "used_by", "tools"}
 _TRUE = {"true", "1", "yes", "y", "t"}
 
 
