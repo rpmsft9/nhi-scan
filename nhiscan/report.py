@@ -1,12 +1,14 @@
-"""Render a ScanResult as Markdown or a JSON object."""
+"""Render a ScanResult (or a DriftReport) as Markdown or a JSON object."""
 
 from __future__ import annotations
 
 from . import owasp
+from .diff import DriftReport, IdentityDelta
 from .models import RiskTier
 from .scan import ScanResult
 
 _TIER_BADGE = {1: "🔴 Critical", 2: "🟠 High", 3: "🟡 Moderate", 4: "🟢 Baseline"}
+_ARROW = {"escalated": "🔺", "reduced": "🔻", "same": "＝", "n/a": ""}
 
 
 def to_json(result: ScanResult) -> dict:
@@ -84,3 +86,96 @@ def to_markdown(result: ScanResult) -> str:
         out.append("")
 
     return "\n".join(out)
+
+
+# ---- drift (scan-to-scan) rendering --------------------------------------------------
+
+def _delta_lines(d: IdentityDelta) -> list[str]:
+    out: list[str] = []
+    if d.tier_before is not None and d.tier_after is not None:
+        arrow = _ARROW[d.tier_direction]
+        out.append(
+            f"  - Tier: {_TIER_BADGE[d.tier_before]} → {_TIER_BADGE[d.tier_after]} {arrow} "
+            f"({d.tier_direction})"
+        )
+    if d.tools_added:
+        out.append(f"  - **Tools added (reach ↑):** {', '.join(d.tools_added)}")
+    if d.tools_removed:
+        out.append(f"  - Tools removed: {', '.join(d.tools_removed)}")
+    if d.scopes_added:
+        out.append(f"  - **Scopes added (reach ↑):** {', '.join(d.scopes_added)}")
+    if d.scopes_removed:
+        out.append(f"  - Scopes removed: {', '.join(d.scopes_removed)}")
+    for change in d.posture_changes:
+        out.append(f"  - Posture: {change}")
+    for f in d.findings_new:
+        out.append(f"  - `NEW` finding: {f}")
+    for f in d.findings_resolved:
+        out.append(f"  - `resolved`: {f}")
+    return out
+
+
+def drift_to_markdown(report: DriftReport) -> str:
+    out: list[str] = ["# Non-Human Identity Drift Report\n"]
+    out.append(
+        f"**{len(report.changed)}** changed · **{len(report.added)}** added · "
+        f"**{len(report.removed)}** removed · **{report.unchanged}** unchanged · "
+        f"**{len(report.escalations)}** risk escalations\n"
+    )
+
+    reach_only = report.reach_growth_only
+    if reach_only:
+        out.append("## ⚠️ Reach grew without a tier change\n")
+        out.append("_These identities gained tools or scopes while privilege, credential age, "
+                   "and owner stayed the same — the blind spot a point-in-time tier misses._\n")
+        for d in reach_only:
+            out.append(f"### {d.name} `({d.id})`")
+            out.extend(_delta_lines(d))
+            out.append("")
+
+    if report.escalations:
+        out.append("## 🔺 Risk escalations\n")
+        for d in report.escalations:
+            if d in reach_only:
+                continue
+            out.append(f"### {d.name} `({d.id})`")
+            out.extend(_delta_lines(d))
+            out.append("")
+
+    if report.added:
+        out.append("## Added identities\n")
+        for d in report.added:
+            out.append(f"- **{d.name}** `({d.id})` — {_TIER_BADGE[d.tier_after]}")
+        out.append("")
+    if report.removed:
+        out.append("## Removed identities\n")
+        for d in report.removed:
+            out.append(f"- {d.name} `({d.id})` — was {_TIER_BADGE[d.tier_before]}")
+        out.append("")
+
+    return "\n".join(out)
+
+
+def drift_to_json(report: DriftReport) -> dict:
+    def d(delta: IdentityDelta) -> dict:
+        return {
+            "id": delta.id, "name": delta.name, "status": delta.status,
+            "tier_before": delta.tier_before, "tier_after": delta.tier_after,
+            "tier_direction": delta.tier_direction,
+            "reach_grew": delta.reach_grew, "risk_increased": delta.risk_increased,
+            "tools_added": delta.tools_added, "tools_removed": delta.tools_removed,
+            "scopes_added": delta.scopes_added, "scopes_removed": delta.scopes_removed,
+            "posture_changes": delta.posture_changes,
+            "findings_new": delta.findings_new, "findings_resolved": delta.findings_resolved,
+        }
+    return {
+        "summary": {
+            "changed": len(report.changed), "added": len(report.added),
+            "removed": len(report.removed), "unchanged": report.unchanged,
+            "escalations": len(report.escalations),
+            "reach_growth_without_tier_change": len(report.reach_growth_only),
+        },
+        "changed": [d(x) for x in report.changed],
+        "added": [d(x) for x in report.added],
+        "removed": [d(x) for x in report.removed],
+    }

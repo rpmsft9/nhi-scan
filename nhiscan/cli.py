@@ -1,8 +1,9 @@
 """Command-line interface for nhi-scan.
 
-    nhi-scan inventory <inventory>          # counts by type and risk tier
-    nhi-scan scan      <inventory>          # full risk report (Markdown)
-    nhi-scan scan      <inventory> --json   # machine-readable JSON
+    nhi-scan inventory <inventory>              # counts by type and risk tier
+    nhi-scan scan      <inventory>              # full risk report (Markdown)
+    nhi-scan scan      <inventory> --json       # machine-readable JSON
+    nhi-scan diff      <before> <after>         # drift: what changed between two scans
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ import json
 import sys
 
 from . import __version__, report
+from .diff import diff
 from .ingest import load_fleet
 from .scan import scan
 
@@ -38,6 +40,15 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_diff(args: argparse.Namespace) -> int:
+    report_ = diff(load_fleet(args.before), load_fleet(args.after))
+    if args.json:
+        print(json.dumps(report.drift_to_json(report_), indent=2))
+    else:
+        print(report.drift_to_markdown(report_))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="nhi-scan", description="Non-human & agent identity risk scanner.")
     p.add_argument("--version", action="version", version=f"nhi-scan {__version__}")
@@ -51,6 +62,12 @@ def build_parser() -> argparse.ArgumentParser:
     sc.add_argument("inventory", help="Path to a JSON/YAML NHI inventory.")
     sc.add_argument("--json", action="store_true", help="Emit JSON instead of Markdown.")
     sc.set_defaults(func=_cmd_scan)
+
+    df = sub.add_parser("diff", help="Show drift between two inventories (reach growth, escalations).")
+    df.add_argument("before", help="Earlier JSON/YAML inventory.")
+    df.add_argument("after", help="Later JSON/YAML inventory.")
+    df.add_argument("--json", action="store_true", help="Emit JSON instead of Markdown.")
+    df.set_defaults(func=_cmd_diff)
     return p
 
 

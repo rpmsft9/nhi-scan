@@ -15,7 +15,8 @@
     "third_party": "true if issued to / operated by an outside vendor",
     "human_used": "true if a human logs in interactively with this identity",
     "shared_across_env": "true if the same identity/credential is used in both prod and non-prod",
-    "used_by": "list of workloads sharing this identity; more than one is flagged as reuse"
+    "used_by": "list of workloads sharing this identity; more than one is flagged as reuse",
+    "tools": "for AI agents: list of tools/connectors/MCP servers the agent can invoke (its reach); tracked by `nhi-scan diff`"
   },
   "identities": [
     {
@@ -41,7 +42,8 @@
       "third_party": false,
       "human_used": false,
       "shared_across_env": false,
-      "used_by": ["payments-batch"]
+      "used_by": ["payments-batch"],
+      "tools": []
     }
   ]
 }

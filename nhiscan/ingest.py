@@ -50,6 +50,7 @@ def _record_to_nhi(rec: dict) -> NHI:
         human_used=bool(rec.get("human_used", False)),
         shared_across_env=bool(rec.get("shared_across_env", False)),
         used_by=_as_list(rec.get("used_by")),
+        tools=_as_list(rec.get("tools")),
     )
 
 

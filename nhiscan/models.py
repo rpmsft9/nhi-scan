@@ -161,8 +161,16 @@ class NHI:
     human_used: bool = False                  # a human logs in interactively with this NHI
     shared_across_env: bool = False           # same identity used in both prod and non-prod
     used_by: list[str] = field(default_factory=list)  # systems/workloads consuming this NHI
+    tools: list[str] = field(default_factory=list)    # agent's tools/connectors/MCP servers — its *reach*
 
     # --- derived posture ---------------------------------------------------------------
+    @property
+    def reach(self) -> int:
+        """Blast-radius proxy: distinct tools/connectors plus scopes the identity can invoke.
+        For an AI agent, ``tools`` can grow (a new connector) without any change to
+        privilege, credential age, or owner — which is why drift detection matters."""
+        return len(self.tools) + len(self.scopes)
+
     @property
     def is_orphaned(self) -> bool:
         return not (self.owner and self.owner.strip())

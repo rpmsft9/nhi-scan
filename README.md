@@ -49,6 +49,7 @@ pip install -e '.[dev]'     # + pytest
 nhi-scan inventory examples/sample-inventory.json     # counts by type and risk tier
 nhi-scan scan      examples/sample-inventory.json     # full Markdown risk report
 nhi-scan scan      examples/sample-inventory.json --json   # machine-readable JSON
+nhi-scan diff      examples/sample-inventory.json examples/sample-inventory-after.json   # drift between two scans
 ```
 
 See [`examples/sample-report.md`](examples/sample-report.md) for a full rendered report.
@@ -97,7 +98,32 @@ a safe, conservative posture, so a partial inventory still assesses.
 | `last_rotated_days` / `last_used_days` | integer or null | NHI7 / NHI1 |
 | `exposure` | `internet`, `external_partner`, `internal` | tiering, NHI6 |
 | `scopes` | list of strings (`*` / `:*` = wildcard) | NHI5 |
+| `tools` | list of strings — an agent's tools / connectors / MCP servers | agent **reach** (drift) |
 | `autonomous`, `third_party`, `human_used`, `shared_across_env`, `used_by` | booleans / list | agent rules, NHI3/8/9/10 |
+
+## Detecting drift — when an agent's reach grows
+
+Privilege, credential age, and owner change only when someone *touches* the identity. An AI
+agent's **reach** doesn't: give it a new tool, connector, or MCP server and its blast radius
+grows while those attributes — and often the risk tier — look identical. `nhi-scan diff`
+compares two inventories and surfaces exactly that:
+
+```bash
+nhi-scan diff before.json after.json          # Markdown
+nhi-scan diff before.json after.json --json    # machine-readable
+```
+
+It reports added/removed identities, **tier escalations**, and — most importantly — a
+**"reach grew without a tier change"** section: identities that gained `tools` or `scopes` while
+privilege, credential age, and owner stayed the same. Run it on a schedule (or in CI) to catch
+reach creep between point-in-time scans.
+
+**Where `tools` comes from.** `nhi-scan` reads the agent's declared tool manifest — it doesn't
+infer reach. Populate `tools` from wherever an agent's capabilities are defined: its **MCP server
+config** (the tools each server exposes), its **agent-framework manifest** (LangChain / Semantic
+Kernel / AutoGen function lists), or its registered **plugins / connectors / actions** in
+platforms like **Copilot Studio, Microsoft Agent 365 / Entra Agent ID**. Feeding that manifest in
+is what turns "an agent got a new connector" from an invisible change into a diffable one.
 
 ### Preparing your inventory
 
