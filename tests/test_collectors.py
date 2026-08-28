@@ -4,7 +4,7 @@ from pathlib import Path
 
 from nhiscan.ingest import load_fleet
 from nhiscan.scan import scan
-from tools.collectors import aws, csv_import, entra, gcp, mcp
+from tools.collectors import aws, csv_import, entra, entra_agents, gcp, mcp
 from tools.collectors.common import KNOWN_FIELDS, days_since
 
 SAMPLES = Path(__file__).resolve().parents[1] / "tools" / "samples"
@@ -110,6 +110,67 @@ def test_csv_transform():
     assert legacy["secret_storage"] == "plaintext"
     assert "last_rotated_days" not in legacy  # blank int -> omitted
 
+
+
+# --- Entra Agent ID -------------------------------------------------------------------
+def test_entra_agents_transform():
+    bundle = _load("entra-agents.json")
+    recs = entra_agents.transform(bundle, now=NOW)
+    assert len(recs) == 4
+    assert _only_known(recs)
+    by_name = {r["name"]: r for r in recs}
+
+    # every agent identity is an ai_agent, not a generic service principal
+    assert all(r["type"] == "ai_agent" for r in recs)
+
+    # application permissions => acts with no user present
+    assert by_name["claims-review-agent"]["autonomous"] is True
+    # delegated-only grants => not autonomous, and the scopes still come through
+    assert "autonomous" not in by_name["drafting-assistant"]
+    assert by_name["drafting-assistant"]["scopes"] == ["User.Read", "Mail.Send"]
+
+    # sponsor becomes the accountable owner
+    assert by_name["claims-review-agent"]["owner"] == "dana@bank.example"
+    # no sponsor and no owner => orphaned, so nhi-scan can flag it (NHI1)
+    assert "owner" not in by_name["orphaned-batch-agent"]
+
+    # privilege is inferred from the granted roles
+    assert by_name["claims-review-agent"]["privilege"] == "admin"      # Directory.ReadWrite.All
+    assert by_name["orphaned-batch-agent"]["privilege"] == "admin"     # wildcard ledger:*
+    assert by_name["vendor-triage-agent"]["privilege"] == "scoped"
+
+    # credential shape and rotation age
+    assert by_name["claims-review-agent"]["credential"] == "static_secret"
+    assert by_name["drafting-assistant"]["credential"] == "federated"
+    assert by_name["vendor-triage-agent"]["credential"] == "certificate"
+    assert by_name["orphaned-batch-agent"]["last_rotated_days"] > 900
+
+    # third party derived from the owning tenant
+    assert by_name["vendor-triage-agent"]["third_party"] is True
+    assert "third_party" not in by_name["claims-review-agent"]
+
+
+def test_entra_agents_accepts_bare_list_and_groups_blueprints():
+    bundle = _load("entra-agents.json")
+    assert entra_agents.transform(bundle["agents"], now=NOW)  # bare list works too
+    groups = entra_agents.blueprint_summary(bundle)
+    assert len(groups) == 3
+    assert len(groups["bp-claims-0000-0000-0000-000000000001"]) == 2
+
+
+def test_entra_agents_output_scans(tmp_path):
+    recs = entra_agents.transform(_load("entra-agents.json"), now=NOW)
+    path = tmp_path / "agents.json"
+    path.write_text(json.dumps(recs), encoding="utf-8")
+    result = scan(load_fleet(path))
+    assert result.total == len(recs) == 4
+
+    by_name = {a.nhi.name: a for a in result.assessments}
+    # autonomous + wildcard privilege + orphaned + stale secret = crown jewel
+    assert int(by_name["orphaned-batch-agent"].tier.tier) == 1
+    assert by_name["orphaned-batch-agent"].findings
+    # the delegated, federated, sponsored agent should not rank alongside it
+    assert int(by_name["drafting-assistant"].tier.tier) > 1
 
 # --- round-trip: collector output feeds nhi-scan --------------------------------------
 def test_collector_output_scans(tmp_path):

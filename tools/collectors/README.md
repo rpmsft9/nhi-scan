@@ -22,6 +22,46 @@ Infers credential type (certificate / secret / federated), rotation age from the
 credential, and third-party status from the app's owning tenant. Role assignments (privilege)
 need extra Graph calls and are left at the default.
 
+## Entra Agent ID (AI agent identities)
+
+Read-only permission: `AgentIdentity.Read.All` + `Application.Read.All` (or `Directory.Read.All`).
+Directory role: Global Reader is sufficient.
+
+Agent identities inherit from servicePrincipal, so the collector above *sees* them — but flattens
+them into `type: service_principal` and drops the attributes that make an agent worth governing.
+Use this collector instead:
+
+```bash
+az login --tenant <YOUR_TENANT_ID>
+python -m tools.collectors.gather_entra_agents > entra-agents-bundle.json
+python -m tools.collectors.entra_agents entra-agents-bundle.json > entra-agents-nhi.json
+nhi-scan scan entra-agents-nhi.json
+```
+
+`gather_entra_agents` reads the `microsoft.graph.agentIdentity` cast on Graph v1.0 (`--beta` for
+the beta endpoint) and expands each agent's sponsors, owners, app-role assignments, and delegated
+grants. Auth stays with `az` — the script only issues GETs through your existing session.
+
+What the transform infers:
+
+| Emitted | Derived from |
+| --- | --- |
+| `type: ai_agent` | every agent identity, so the agent rules and autonomy tiering actually fire |
+| `autonomous` | **application** permissions (`appRoleAssignments`, the `roles` claim) — an agent acting with no user present. Delegated-only agents (`oauth2PermissionGrants`, `scp`) are *not* marked autonomous |
+| `owner` | the **sponsor** (Entra Agent ID's accountable human), falling back to owner. No sponsor and no owner → no `owner` → flagged orphaned under NHI1 |
+| `privilege` | granted role values — wildcards and `Directory.ReadWrite.All`-class roles → `admin`, other `*.ReadWrite.All`/directory-adjacent → `privileged` |
+| `scopes` | app-role values plus delegated scopes |
+| `credential` | `keyCredentials` → certificate, `passwordCredentials` → static secret, neither → federated |
+| `third_party` | `appOwnerOrganizationId` differing from your tenant |
+
+Blueprint groupings print to **stderr** (stdout stays clean JSON) — agents created from one
+blueprint share one access model, so a finding against a blueprint is a finding against every
+agent under it.
+
+**Reach (`tools`) is not in Entra.** An agent's tool/connector manifest lives in Agent 365,
+Copilot Studio, or its MCP config. Collect it with the [agent tool-manifest collector](#agent-tool-manifests-agent-reach)
+and merge on `id` to make `nhi-scan diff` able to catch reach growth.
+
 ## AWS IAM
 
 Read-only permission: the AWS-managed `IAMReadOnlyAccess` policy. Assemble a bundle, then transform

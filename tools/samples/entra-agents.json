@@ -1,0 +1,95 @@
+{
+  "tenantId": "TENANT-AAA",
+  "version": "v1.0",
+  "agents": [
+    {
+      "@odata.type": "#microsoft.graph.agentIdentity",
+      "id": "a0000000-0000-0000-0000-000000000001",
+      "appId": "aaaa0000-0000-0000-0000-000000000001",
+      "displayName": "claims-review-agent",
+      "servicePrincipalType": "ServiceIdentity",
+      "agentIdentityBlueprintId": "bp-claims-0000-0000-0000-000000000001",
+      "appOwnerOrganizationId": "TENANT-AAA",
+      "accountEnabled": true,
+      "passwordCredentials": [
+        { "keyId": "p1", "startDateTime": "2025-02-01T00:00:00Z" }
+      ],
+      "keyCredentials": [],
+      "sponsors": [
+        { "id": "u1", "displayName": "Dana Reyes", "userPrincipalName": "dana@bank.example" }
+      ],
+      "owners": [],
+      "appRoleAssignments": [
+        { "appRoleId": "r1", "resourceId": "graph", "resourceDisplayName": "Microsoft Graph",
+          "appRoleValue": "Files.Read.All" },
+        { "appRoleId": "r2", "resourceId": "graph", "resourceDisplayName": "Microsoft Graph",
+          "appRoleValue": "Directory.ReadWrite.All" }
+      ],
+      "oauth2PermissionGrants": []
+    },
+    {
+      "@odata.type": "#microsoft.graph.agentIdentity",
+      "id": "a0000000-0000-0000-0000-000000000002",
+      "appId": "aaaa0000-0000-0000-0000-000000000002",
+      "displayName": "drafting-assistant",
+      "servicePrincipalType": "ServiceIdentity",
+      "agentIdentityBlueprintId": "bp-assist-0000-0000-0000-000000000002",
+      "appOwnerOrganizationId": "TENANT-AAA",
+      "accountEnabled": true,
+      "passwordCredentials": [],
+      "keyCredentials": [],
+      "sponsors": [
+        { "id": "u2", "displayName": "Sam Okafor", "userPrincipalName": "sam@bank.example" }
+      ],
+      "owners": [],
+      "appRoleAssignments": [],
+      "oauth2PermissionGrants": [
+        { "id": "g1", "scope": "User.Read Mail.Send" }
+      ]
+    },
+    {
+      "@odata.type": "#microsoft.graph.agentIdentity",
+      "id": "a0000000-0000-0000-0000-000000000003",
+      "appId": "aaaa0000-0000-0000-0000-000000000003",
+      "displayName": "orphaned-batch-agent",
+      "servicePrincipalType": "ServiceIdentity",
+      "agentIdentityBlueprintId": "bp-claims-0000-0000-0000-000000000001",
+      "appOwnerOrganizationId": "TENANT-AAA",
+      "accountEnabled": true,
+      "passwordCredentials": [
+        { "keyId": "p2", "startDateTime": "2023-01-10T00:00:00Z" }
+      ],
+      "keyCredentials": [],
+      "sponsors": [],
+      "owners": [],
+      "appRoleAssignments": [
+        { "appRoleId": "r3", "resourceId": "ledger", "resourceDisplayName": "Ledger API",
+          "appRoleValue": "ledger:*" }
+      ],
+      "oauth2PermissionGrants": []
+    },
+    {
+      "@odata.type": "#microsoft.graph.agentIdentity",
+      "id": "a0000000-0000-0000-0000-000000000004",
+      "appId": "aaaa0000-0000-0000-0000-000000000004",
+      "displayName": "vendor-triage-agent",
+      "servicePrincipalType": "ServiceIdentity",
+      "agentIdentityBlueprintId": "bp-vendor-0000-0000-0000-000000000004",
+      "appOwnerOrganizationId": "TENANT-ZZZ",
+      "accountEnabled": true,
+      "passwordCredentials": [],
+      "keyCredentials": [
+        { "keyId": "c1", "startDateTime": "2026-07-01T00:00:00Z" }
+      ],
+      "sponsors": [
+        { "id": "u3", "displayName": "Priya Nair", "userPrincipalName": "priya@bank.example" }
+      ],
+      "owners": [],
+      "appRoleAssignments": [
+        { "appRoleId": "r4", "resourceId": "tickets", "resourceDisplayName": "Ticketing",
+          "appRoleValue": "tickets.read" }
+      ],
+      "oauth2PermissionGrants": []
+    }
+  ]
+}
