@@ -11,11 +11,12 @@ Read-only throughout: every call is a GET. ``Application.Read.All`` covers the s
 principal and grant reads (``Directory.Read.All`` also works); Global Reader is a sufficient
 directory role.
 
-Per principal, expansion adds ``appRoleAssignments`` (with each role id resolved to its
-readable value, e.g. ``Files.Read.All``) and ``oauth2PermissionGrants`` — the application and
-delegated permission surfaces that drive ``privilege``/``scopes`` in the transform.
+Per principal, expansion adds ``owners`` (so the transform can tell owned from orphaned
+instead of flagging everything ownerless), ``appRoleAssignments`` (with each role id resolved
+to its readable value, e.g. ``Files.Read.All``), and ``oauth2PermissionGrants`` — the
+permission surfaces that drive ``privilege``/``scopes`` in the transform.
 
-Cost: expansion issues two extra GETs per service principal (plus one per newly-seen resource
+Cost: expansion issues three extra GETs per service principal (plus one per newly-seen resource
 to resolve role names). A large tenant with thousands of SPs takes a while — pass
 ``--no-expand`` for a fast names-and-credentials pass, or ``--filter <substring>`` to expand
 only display names containing the substring.
@@ -59,6 +60,7 @@ def main(argv: list[str]) -> int:
                 continue
             sys.stderr.write(f"\r# expanding {i}/{len(todo)}")
             url = f"{base}/servicePrincipals/{sid}"
+            sp["owners"] = paged(f"{url}/owners")
             sp["oauth2PermissionGrants"] = paged(f"{url}/oauth2PermissionGrants")
 
             assignments = paged(f"{url}/appRoleAssignments")

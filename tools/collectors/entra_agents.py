@@ -49,7 +49,7 @@ _PRIVILEGED_HINTS = (
 _ADMIN_HINTS = ("directory.readwrite.all", "rolemanagement.readwrite", "fullcontrol.all")
 
 
-def _display(principal: dict) -> str | None:
+def display_handle(principal: dict) -> str | None:
     """Best human-readable handle for a sponsor/owner directory object."""
     if not isinstance(principal, dict):
         return None
@@ -125,7 +125,7 @@ def transform(bundle, tenant_id: str | None = None,
 
         sponsors = a.get("sponsors") or []
         owners = a.get("owners") or []
-        owner = _display(sponsors[0] if sponsors else (owners[0] if owners else None))
+        owner = display_handle(sponsors[0] if sponsors else (owners[0] if owners else None))
 
         scopes = collect_scopes(a)
         app_roles = a.get("appRoleAssignments") or []

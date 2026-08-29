@@ -31,7 +31,7 @@ def test_days_since_handles_formats():
 # --- Entra ----------------------------------------------------------------------------
 def test_entra_transform():
     recs = entra.transform(_load("entra-sp.json"), tenant_id="TENANT-AAA", now=NOW)
-    assert len(recs) == 3
+    assert len(recs) == 4
     assert _only_known(recs)
     by_name = {r["name"]: r for r in recs}
     assert by_name["payments-connector"]["credential"] == "static_secret"
@@ -50,6 +50,15 @@ def test_entra_transform():
     assert "privilege" not in by_name["reporting-federated"]
     assert "scopes" not in by_name["reporting-federated"]
 
+    # a managed identity's platform-issued cert is not a stored secret: credential is
+    # "managed" (no NHI4/NHI7 despite the old startDateTime), and its owner is emitted
+    mi = by_name["aks-cluster-identity"]
+    assert mi["credential"] == "managed"
+    assert mi["secret_storage"] == "none"
+    assert mi["owner"] == "platform@bank.example"
+    # SPs gathered without owner data stay ownerless (orphaned) rather than guessing
+    assert "owner" not in by_name["payments-connector"]
+
 
 def test_entra_skips_agent_identities():
     sps = _load("entra-sp.json") + [{
@@ -57,7 +66,7 @@ def test_entra_skips_agent_identities():
         "servicePrincipalType": "ServiceIdentity",
     }]
     recs = entra.transform(sps, tenant_id="TENANT-AAA", now=NOW)
-    assert len(recs) == 3  # the agent identity belongs to the entra_agents collector
+    assert len(recs) == 4  # the agent identity belongs to the entra_agents collector
 
 
 # --- AWS ------------------------------------------------------------------------------
@@ -222,6 +231,6 @@ def test_collector_output_scans(tmp_path):
     p = tmp_path / "merged.json"
     p.write_text(json.dumps(merged), encoding="utf-8")
     result = scan(load_fleet(p))
-    assert result.total == len(merged) == 11
+    assert result.total == len(merged) == 12
     # the plaintext admin internet-facing legacy key must land Tier 1
     assert any(a.tier.tier.value == 1 for a in result.assessments)

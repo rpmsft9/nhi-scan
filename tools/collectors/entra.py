@@ -33,7 +33,7 @@ import sys
 from datetime import datetime
 
 from .common import days_since, emit, newest, record
-from .entra_agents import collect_scopes, infer_privilege
+from .entra_agents import collect_scopes, display_handle, infer_privilege
 
 
 def transform(data, tenant_id: str | None = None,
@@ -53,7 +53,12 @@ def transform(data, tenant_id: str | None = None,
 
         passwords = sp.get("passwordCredentials") or []
         certs = sp.get("keyCredentials") or []
-        if certs:
+        if sp.get("servicePrincipalType") == "ManagedIdentity":
+            # A managed identity's keyCredentials are Azure platform-issued certs the platform
+            # rotates itself — not a stored secret anyone manages. Classifying them as
+            # "certificate" produces false NHI7 (long-lived secret) and NHI4 findings.
+            credential = "managed"
+        elif certs:
             credential = "certificate"
         elif passwords:
             credential = "static_secret"
@@ -72,13 +77,17 @@ def transform(data, tenant_id: str | None = None,
         has_grant_data = ("appRoleAssignments" in sp) or ("oauth2PermissionGrants" in sp)
         scopes = collect_scopes(sp) if has_grant_data else []
 
+        owners = sp.get("owners") or []
+        owner = display_handle(owners[0]) if owners else None
+
         out.append(record(
             id=sp.get("id") or sp.get("appId"),
             name=sp.get("displayName") or sp.get("appId"),
             type="service_principal",
             environment="prod",
+            owner=owner,
             credential=credential,
-            secret_storage=("none" if credential == "federated" else "vault"),
+            secret_storage=("none" if credential in ("federated", "managed") else "vault"),
             last_rotated_days=last_rotated,
             third_party=(True if third_party else None),
             privilege=(infer_privilege(scopes) if has_grant_data else None),

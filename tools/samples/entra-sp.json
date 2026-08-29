@@ -47,5 +47,26 @@
     "startDateTime": "2025-06-01T00:00:00Z"
    }
   ]
+ },
+ {
+  "id": "44444444-4444-4444-4444-444444444444",
+  "appId": "aaaa1111-0000-0000-0000-000000000004",
+  "displayName": "aks-cluster-identity",
+  "servicePrincipalType": "ManagedIdentity",
+  "appOwnerOrganizationId": "TENANT-AAA",
+  "passwordCredentials": [],
+  "keyCredentials": [
+   {
+    "keyId": "mi1",
+    "startDateTime": "2024-05-01T00:00:00Z"
+   }
+  ],
+  "owners": [
+   {
+    "id": "u9",
+    "displayName": "Platform Team",
+    "userPrincipalName": "platform@bank.example"
+   }
+  ]
  }
 ]
