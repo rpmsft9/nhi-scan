@@ -48,8 +48,20 @@ def test_wildcard_scope_is_overprivileged():
     assert "NHI5:2025" in _codes(_nhi(scopes=["ledger:*"]))
 
 
-def test_internet_exposure_is_deployment_finding():
-    assert "NHI6:2025" in _codes(_nhi(exposure=Exposure.INTERNET))
+def test_cicd_static_credential_is_deployment_finding():
+    n = _nhi(type=NHIType.CI_CD_TOKEN, credential=CredentialType.STATIC_SECRET,
+             secret_storage=SecretStorage.VAULT)
+    assert "NHI6:2025" in _codes(n)
+
+
+def test_cicd_federated_is_not_deployment_finding():
+    assert "NHI6:2025" not in _codes(_nhi(type=NHIType.CI_CD_TOKEN))
+
+
+def test_internet_exposure_is_not_nhi6():
+    # Internet exposure drives the risk tier (see test_tiering); OWASP scopes NHI6 to
+    # CI/CD deployment configuration, so exposure alone must not claim it.
+    assert "NHI6:2025" not in _codes(_nhi(exposure=Exposure.INTERNET))
 
 
 def test_stale_is_offboarding():

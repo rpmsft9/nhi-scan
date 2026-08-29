@@ -44,7 +44,7 @@ CATALOG: dict[str, OwaspNHI] = {
     ),
     "NHI6:2025": OwaspNHI(
         "NHI6:2025", "Insecure Cloud Deployment Configurations",
-        "Deployment/config weaknesses that expose or over-trust an NHI.",
+        "CI/CD authenticating with static credentials, or OIDC federation without claim restrictions.",
     ),
     "NHI7:2025": OwaspNHI(
         "NHI7:2025", "Long-Lived Secrets",

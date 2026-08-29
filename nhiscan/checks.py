@@ -139,12 +139,19 @@ def check_overprivileged(n: NHI) -> Optional[Finding]:
 
 # --- NHI6: Insecure Cloud Deployment Configurations -----------------------------------
 def check_deployment_config(n: NHI) -> Optional[Finding]:
-    if n.exposure.value == "internet":
+    """OWASP scopes NHI6 to deployment configuration: CI/CD pipelines authenticating with
+    static credentials, or OIDC federation lacking audience/subject claim restrictions.
+    The inventory can assert the first directly; claim-restriction state is not modeled,
+    so the check stays conservative. Internet exposure is a tiering driver (tiering.py),
+    not an NHI6 finding."""
+    if n.type == NHIType.CI_CD_TOKEN and n.credential in (
+        CredentialType.STATIC_SECRET, CredentialType.API_KEY
+    ):
         sev = Severity.CRITICAL if n.privilege.is_elevated else Severity.HIGH
         return _f(
             n, "NHI6:2025", sev,
-            "Identity is reachable from the public internet.",
-            "Place behind private networking / an allow-list; restrict source ranges and add egress controls.",
+            f"CI/CD pipeline authenticates with a {n.credential.value} instead of OIDC workload identity federation.",
+            "Move the pipeline to OIDC federation with audience and subject claim restrictions; retire the static credential.",
         )
     return None
 

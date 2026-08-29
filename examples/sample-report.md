@@ -31,11 +31,10 @@ _Mapped to the [OWASP NHI Top 10](https://owasp.org/www-project-non-human-identi
 ## Identities by risk
 
 ### 🔴 Critical — legacy-etl-api-key `(api_key)`
-- **Owner:** _orphaned_ · **Env:** prod · **Privilege:** privileged · **Score:** 84
+- **Owner:** _orphaned_ · **Env:** prod · **Privilege:** privileged · **Score:** 72
 - **Why this tier:** Privileged identity is reachable from the public internet.
 - **Findings:**
   - `CRITICAL` **NHI2:2025 Secret Leakage** — Static secret stored in plaintext (hardcoded/committed/config). _→ Move the secret to a managed vault, rotate it immediately, and scan history for exposure._
-  - `CRITICAL` **NHI6:2025 Insecure Cloud Deployment Configurations** — Identity is reachable from the public internet. _→ Place behind private networking / an allow-list; restrict source ranges and add egress controls._
   - `HIGH` **NHI1:2025 Improper Offboarding** — Unused for 220 days (staleness window is 90). _→ Deprovision or disable; if still required, re-justify ownership and set an expiry._
   - `HIGH` **NHI7:2025 Long-Lived Secrets** — Static secret with no recorded rotation (never rotated). _→ Rotate now and automate rotation; prefer short-lived, auto-issued credentials._
   - `MEDIUM` **NHI4:2025 Insecure Authentication** — Authenticates with api_key rather than federated/managed identity. _→ Migrate to workload identity federation (OIDC) or a cloud-managed identity — no stored secret._
@@ -66,9 +65,10 @@ _Mapped to the [OWASP NHI Top 10](https://owasp.org/www-project-non-human-identi
   - `MEDIUM` **NHI4:2025 Insecure Authentication** — Authenticates with static_secret rather than federated/managed identity. _→ Migrate to workload identity federation (OIDC) or a cloud-managed identity — no stored secret._
 
 ### 🟡 Moderate — github-actions-deployer `(ci_cd_token)`
-- **Owner:** devsecops@bank.example · **Env:** prod · **Privilege:** privileged · **Score:** 24
+- **Owner:** devsecops@bank.example · **Env:** prod · **Privilege:** privileged · **Score:** 36
 - **Why this tier:** Identity operates in production.
 - **Findings:**
+  - `CRITICAL` **NHI6:2025 Insecure Cloud Deployment Configurations** — CI/CD pipeline authenticates with a static_secret instead of OIDC workload identity federation. _→ Move the pipeline to OIDC federation with audience and subject claim restrictions; retire the static credential._
   - `HIGH` **NHI8:2025 Environment Isolation** — Same identity/credential is used across production and non-production. _→ Split into per-environment identities so a non-prod compromise cannot reach prod._
   - `MEDIUM` **NHI4:2025 Insecure Authentication** — Authenticates with static_secret rather than federated/managed identity. _→ Migrate to workload identity federation (OIDC) or a cloud-managed identity — no stored secret._
   - `MEDIUM` **NHI9:2025 NHI Reuse** — Shared across 3 workloads: web-app, batch, mobile-bff. _→ Issue a dedicated identity per workload to restore least privilege and attribution._
