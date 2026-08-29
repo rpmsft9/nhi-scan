@@ -1,20 +1,75 @@
 [
-  {
-    "UserName": "svc-etl",
-    "Tags": [{ "Key": "owner", "Value": "data-eng@bank.example" }, { "Key": "env", "Value": "prod" }],
-    "AttachedPolicies": ["AdministratorAccess"],
-    "AccessKeys": [
-      { "AccessKeyId": "AKIAEXAMPLE0001", "Status": "Active",
-        "CreateDate": "2024-02-01T00:00:00+00:00", "LastUsedDate": "2026-08-08T00:00:00+00:00" }
-    ]
-  },
-  {
-    "UserName": "svc-reports",
-    "Tags": [{ "Key": "team", "Value": "analytics@bank.example" }],
-    "AttachedPolicies": ["AmazonS3ReadOnlyAccess"],
-    "AccessKeys": [
-      { "AccessKeyId": "AKIAEXAMPLE0002", "Status": "Active",
-        "CreateDate": "2026-07-20T00:00:00+00:00", "LastUsedDate": "2025-12-01T00:00:00+00:00" }
-    ]
-  }
+ {
+  "UserName": "svc-etl",
+  "Tags": [
+   {
+    "Key": "owner",
+    "Value": "data-eng@bank.example"
+   },
+   {
+    "Key": "env",
+    "Value": "prod"
+   }
+  ],
+  "AttachedPolicies": [
+   "AdministratorAccess"
+  ],
+  "AccessKeys": [
+   {
+    "AccessKeyId": "AKIAEXAMPLE0001",
+    "Status": "Active",
+    "CreateDate": "2024-02-01T00:00:00+00:00",
+    "LastUsedDate": "2026-08-08T00:00:00+00:00"
+   }
+  ]
+ },
+ {
+  "UserName": "svc-reports",
+  "Tags": [
+   {
+    "Key": "team",
+    "Value": "analytics@bank.example"
+   }
+  ],
+  "AttachedPolicies": [
+   "AmazonS3ReadOnlyAccess"
+  ],
+  "AccessKeys": [
+   {
+    "AccessKeyId": "AKIAEXAMPLE0002",
+    "Status": "Active",
+    "CreateDate": "2026-07-20T00:00:00+00:00",
+    "LastUsedDate": "2025-12-01T00:00:00+00:00"
+   }
+  ]
+ },
+ {
+  "UserName": "svc-deploy",
+  "Tags": [
+   {
+    "Key": "owner",
+    "Value": "platform@bank.example"
+   },
+   {
+    "Key": "env",
+    "Value": "prod"
+   }
+  ],
+  "AttachedPolicies": [],
+  "InlinePolicyNames": [
+   "deploy-extra"
+  ],
+  "GroupPolicies": [
+   "AdministratorAccess"
+  ],
+  "HasWildcardAction": true,
+  "AccessKeys": [
+   {
+    "AccessKeyId": "AKIAEXAMPLE0003",
+    "Status": "Active",
+    "CreateDate": "2025-05-01T00:00:00+00:00",
+    "LastUsedDate": "2026-08-05T00:00:00+00:00"
+   }
+  ]
+ }
 ]

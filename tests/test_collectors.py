@@ -38,22 +38,48 @@ def test_entra_transform():
     assert by_name["payments-connector"]["last_rotated_days"] > 900
     assert by_name["reporting-federated"]["credential"] == "federated"
     assert "last_rotated_days" not in by_name["reporting-federated"]  # no creds -> omitted
+
     assert by_name["vendor-analytics-app"]["credential"] == "certificate"
     assert by_name["vendor-analytics-app"]["third_party"] is True
     assert "third_party" not in by_name["payments-connector"]  # same tenant -> omitted
+
+    # grant data present -> real scopes and inferred privilege
+    assert by_name["payments-connector"]["scopes"] == ["Payments.ReadWrite.All", "User.Read"]
+    assert by_name["payments-connector"]["privilege"] == "privileged"
+    # no grant data gathered -> omit rather than guess (conservative defaults apply)
+    assert "privilege" not in by_name["reporting-federated"]
+    assert "scopes" not in by_name["reporting-federated"]
+
+
+def test_entra_skips_agent_identities():
+    sps = _load("entra-sp.json") + [{
+        "id": "agent-1", "displayName": "some-agent",
+        "servicePrincipalType": "ServiceIdentity",
+    }]
+    recs = entra.transform(sps, tenant_id="TENANT-AAA", now=NOW)
+    assert len(recs) == 3  # the agent identity belongs to the entra_agents collector
 
 
 # --- AWS ------------------------------------------------------------------------------
 def test_aws_transform():
     recs = aws.transform(_load("aws-users.json"), now=NOW)
-    assert len(recs) == 2
+    assert len(recs) == 3
     assert _only_known(recs)
-    admin = next(r for r in recs if r["privilege"] == "admin")
+    by_name = {r["name"].split(" ")[0]: r for r in recs}
+    admin = by_name["svc-etl"]
+    assert admin["privilege"] == "admin"
     assert admin["owner"] == "data-eng@bank.example"
     assert admin["last_used_days"] <= 2
     assert admin["type"] == "api_key"
-    scoped = next(r for r in recs if r["privilege"] == "scoped")
+    scoped = by_name["svc-reports"]
+    assert scoped["privilege"] == "scoped"
     assert scoped["last_used_days"] > 90  # stale
+
+    # nothing attached directly — admin arrives through group membership,
+    # and the wildcard inline policy surfaces as a wildcard scope (NHI5)
+    deploy = by_name["svc-deploy"]
+    assert deploy["privilege"] == "admin"
+    assert deploy["scopes"] == ["*"]
 
 
 # --- GCP ------------------------------------------------------------------------------
@@ -66,6 +92,19 @@ def test_gcp_transform():
     assert by_name["batch-runner"]["last_rotated_days"] > 800
     assert by_name["workload-federated"]["credential"] == "managed"
     assert "last_rotated_days" not in by_name["workload-federated"]
+
+    # roles/editor is project-wide write -> admin; scoped role stays scoped
+    assert by_name["batch-runner"]["privilege"] == "admin"
+    assert by_name["batch-runner"]["scopes"] == ["roles/editor", "roles/storage.objectAdmin"]
+    assert by_name["workload-federated"]["privilege"] == "scoped"
+
+
+def test_gcp_without_bindings_omits_privilege():
+    accounts = _load("gcp-accounts.json")
+    for a in accounts:
+        del a["roles"]
+    recs = gcp.transform(accounts, now=NOW)
+    assert all("privilege" not in r and "scopes" not in r for r in recs)
 
 
 # --- CSV ------------------------------------------------------------------------------
@@ -183,6 +222,6 @@ def test_collector_output_scans(tmp_path):
     p = tmp_path / "merged.json"
     p.write_text(json.dumps(merged), encoding="utf-8")
     result = scan(load_fleet(p))
-    assert result.total == len(merged) == 10
+    assert result.total == len(merged) == 11
     # the plaintext admin internet-facing legacy key must land Tier 1
     assert any(a.tier.tier.value == 1 for a in result.assessments)

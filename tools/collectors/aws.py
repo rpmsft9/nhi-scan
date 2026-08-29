@@ -11,9 +11,20 @@ Expected bundle shape (list of users):
     [{"UserName": "...",
       "Tags": [{"Key": "owner", "Value": "team@x"}, {"Key": "env", "Value": "prod"}],
       "AttachedPolicies": ["AdministratorAccess"],
+      "InlinePolicyNames": ["etl-extra"],
+      "GroupPolicies": ["PowerUserAccess"],
+      "HasWildcardAction": true,
       "AccessKeys": [{"AccessKeyId": "AKIA...", "Status": "Active",
                       "CreateDate": "2024-01-01T00:00:00+00:00",
                       "LastUsedDate": "2026-08-01T00:00:00+00:00"}]}]
+
+**Effective permissions, not just direct ones.** Privilege is inferred from the union of
+attached user policies, inline user policies, and policies inherited through group membership
+(``GroupPolicies``) — the quiet path by which most over-permissioned IAM users got that way.
+``HasWildcardAction`` (any reachable policy document granting ``"Action": "*"``) surfaces as a
+wildcard scope so NHI5 detection fires. Bundles built by the older gather script (attached
+policies only) still transform, with correspondingly narrower inference — use
+``python -m tools.collectors.gather_aws`` to build the full bundle.
 """
 
 from __future__ import annotations
@@ -50,7 +61,13 @@ def transform(users: list[dict], now: datetime | None = None) -> list[dict]:
         tags = u.get("Tags") or []
         owner = _tag(tags, "owner", "team", "contact")
         env = (_tag(tags, "env", "environment") or "prod").lower()
-        priv = _privilege(u.get("AttachedPolicies") or [])
+        policy_names = (
+            (u.get("AttachedPolicies") or [])
+            + (u.get("InlinePolicyNames") or [])
+            + (u.get("GroupPolicies") or [])
+        )
+        priv = _privilege(policy_names)
+        wildcard = bool(u.get("HasWildcardAction"))
         for key in (u.get("AccessKeys") or []):
             akid = key.get("AccessKeyId", "")
             out.append(record(
@@ -63,6 +80,7 @@ def transform(users: list[dict], now: datetime | None = None) -> list[dict]:
                 credential="api_key",
                 last_rotated_days=days_since(key.get("CreateDate"), now=now),
                 last_used_days=days_since(key.get("LastUsedDate"), now=now),
+                scopes=(["*"] if wildcard else None),
             ))
     return out
 

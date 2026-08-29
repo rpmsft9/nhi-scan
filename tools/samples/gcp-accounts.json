@@ -1,20 +1,39 @@
 [
-  {
-    "email": "batch@proj-a.iam.gserviceaccount.com",
-    "displayName": "batch-runner",
-    "disabled": false,
-    "labels": { "owner": "platform@bank.example", "env": "prod" },
-    "keys": [
-      { "keyType": "USER_MANAGED", "validAfterTime": "2024-03-01T00:00:00Z" }
-    ]
+ {
+  "email": "batch@proj-a.iam.gserviceaccount.com",
+  "displayName": "batch-runner",
+  "disabled": false,
+  "labels": {
+   "owner": "platform@bank.example",
+   "env": "prod"
   },
-  {
-    "email": "workload@proj-a.iam.gserviceaccount.com",
-    "displayName": "workload-federated",
-    "disabled": false,
-    "labels": { "owner": "ml@bank.example", "env": "prod" },
-    "keys": [
-      { "keyType": "SYSTEM_MANAGED", "validAfterTime": "2026-08-01T00:00:00Z" }
-    ]
-  }
+  "keys": [
+   {
+    "keyType": "USER_MANAGED",
+    "validAfterTime": "2024-03-01T00:00:00Z"
+   }
+  ],
+  "roles": [
+   "roles/editor",
+   "roles/storage.objectAdmin"
+  ]
+ },
+ {
+  "email": "workload@proj-a.iam.gserviceaccount.com",
+  "displayName": "workload-federated",
+  "disabled": false,
+  "labels": {
+   "owner": "ml@bank.example",
+   "env": "prod"
+  },
+  "keys": [
+   {
+    "keyType": "SYSTEM_MANAGED",
+    "validAfterTime": "2026-08-01T00:00:00Z"
+   }
+  ],
+  "roles": [
+   "roles/aiplatform.user"
+  ]
+ }
 ]

@@ -148,13 +148,13 @@ failing, so a partial inventory still produces a useful report.
 
 For anything past a pilot, don't hand-write the file — **generate it** from your environment with
 the [collectors](tools/collectors/README.md). Each is a read-only transform (source API JSON in →
-nhi-scan JSON out) for **Entra ID, Entra Agent ID, AWS IAM, GCP service accounts, and CSV exports**:
+nhi-scan JSON out) for **Entra ID, Entra Agent ID, AWS IAM, GCP service accounts, and CSV exports** — each paired with a read-only `gather_*` script that collects the identity's **granted permissions** (app roles and delegated scopes; attached, inline, and group-inherited IAM policies; project role bindings), so privilege is measured, not guessed:
 
 ```bash
-az ad sp list --all -o json | python -m tools.collectors.entra --tenant <TENANT> > entra-nhi.json
+python -m tools.collectors.gather_entra        | python -m tools.collectors.entra        > entra-nhi.json
 python -m tools.collectors.gather_entra_agents | python -m tools.collectors.entra_agents > agents-nhi.json
-python -m tools.collectors.aws aws-bundle.json > aws-nhi.json
-python -m tools.collectors.gcp gcp-accounts.json > gcp-nhi.json
+python -m tools.collectors.gather_aws          | python -m tools.collectors.aws          > aws-nhi.json
+python -m tools.collectors.gather_gcp          | python -m tools.collectors.gcp          > gcp-nhi.json
 python -m tools.collectors.csv_import identities.csv > csv-nhi.json
 # merge every source, then scan
 jq -s 'add' *-nhi.json > inventory.json && nhi-scan scan inventory.json

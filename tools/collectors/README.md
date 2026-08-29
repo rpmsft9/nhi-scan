@@ -12,15 +12,27 @@ The flow is always: **collect (per source) → merge → scan.**
 
 ## Entra ID (Azure AD)
 
-Read-only permission: `Directory.Read.All`.
+Read-only permission: `Application.Read.All` (or `Directory.Read.All`); Global Reader is a
+sufficient directory role.
 
 ```bash
+# with granted permissions (app roles + delegated scopes) — recommended
+az login --tenant <YOUR_TENANT_ID>
+python -m tools.collectors.gather_entra > entra-sp-bundle.json
+python -m tools.collectors.entra entra-sp-bundle.json > entra-nhi.json
+
+# names/credentials only — one call, no permission data
 az ad sp list --all -o json | python -m tools.collectors.entra --tenant <YOUR_TENANT_ID> > entra-nhi.json
 ```
 
 Infers credential type (certificate / secret / federated), rotation age from the newest
-credential, and third-party status from the app's owning tenant. Role assignments (privilege)
-need extra Graph calls and are left at the default.
+credential, and third-party status from the app's owning tenant. With the `gather_entra` path,
+each principal's **app-role assignments and delegated grants** populate `scopes` and drive
+`privilege`, so overprivilege (NHI5) and wildcard detection can fire. Without grant data,
+`privilege`/`scopes` are omitted rather than guessed — and overprivilege findings won't fire
+for those records. Expansion costs two extra GETs per principal (`--no-expand` or
+`--filter <substring>` to limit it). Agent identities (`ServiceIdentity`) are excluded — use
+the Entra Agent ID collector below, and merging the two stays double-count-free.
 
 ## Entra Agent ID (AI agent identities)
 
@@ -64,54 +76,40 @@ and merge on `id` to make `nhi-scan diff` able to catch reach growth.
 
 ## AWS IAM
 
-Read-only permission: the AWS-managed `IAMReadOnlyAccess` policy. Assemble a bundle, then transform
-(one record per access key):
+Read-only permission: the AWS-managed `IAMReadOnlyAccess` policy.
 
 ```bash
-python - <<'PY' > aws-bundle.json
-import json, subprocess
-def aws(*a): return json.loads(subprocess.check_output(["aws", *a, "--output", "json"]))
-users = []
-for u in aws("iam", "list-users")["Users"]:
-    name = u["UserName"]
-    keys = []
-    for k in aws("iam", "list-access-keys", "--user-name", name)["AccessKeyMetadata"]:
-        used = aws("iam", "get-access-key-last-used", "--access-key-id", k["AccessKeyId"]).get("AccessKeyLastUsed", {})
-        keys.append({"AccessKeyId": k["AccessKeyId"], "Status": k["Status"],
-                     "CreateDate": str(k["CreateDate"]), "LastUsedDate": str(used.get("LastUsedDate") or "")})
-    pols = [p["PolicyName"] for p in aws("iam", "list-attached-user-policies", "--user-name", name)["AttachedPolicies"]]
-    tags = aws("iam", "list-user-tags", "--user-name", name).get("Tags", [])
-    users.append({"UserName": name, "Tags": tags, "AttachedPolicies": pols, "AccessKeys": keys})
-print(json.dumps(users))
-PY
+python -m tools.collectors.gather_aws > aws-bundle.json
 python -m tools.collectors.aws aws-bundle.json > aws-nhi.json
 ```
 
-Infers `admin` from `AdministratorAccess`, `owner`/`env` from tags, and rotation/last-used from
-key dates.
+One record per access key. Privilege is inferred from the **union** of attached user policies,
+inline user policies, and policies inherited through group membership — attached-only
+gathering is how a group-granted administrator scores as `scoped`. The gather also scans
+reachable policy documents and sets a wildcard flag when any statement grants `"Action": "*"`,
+which surfaces as a wildcard scope (NHI5). `--no-documents` skips the document scan; group and
+policy lookups are cached. Owner and environment come from `owner`/`team` and `env` tags;
+rotation and staleness from key dates. Older attached-only bundles still transform, with
+correspondingly narrower inference.
 
 ## GCP service accounts
 
-Read-only role: `roles/iam.securityReviewer` (or viewer). Assemble accounts + keys, then transform:
+Read-only role: `roles/iam.securityReviewer` (or project viewer).
 
 ```bash
-python - <<'PY' > gcp-accounts.json
-import json, subprocess
-def g(*a): return json.loads(subprocess.check_output(["gcloud", *a, "--format=json"]))
-out = []
-for sa in g("iam", "service-accounts", "list"):
-    keys = g("iam", "service-accounts", "keys", "list", "--iam-account", sa["email"])
-    out.append({"email": sa["email"], "displayName": sa.get("displayName"),
-                "disabled": sa.get("disabled", False),
-                "labels": sa.get("labels") or {},
-                "keys": [{"keyType": k.get("keyType"), "validAfterTime": k.get("validAfterTime")} for k in keys]})
-print(json.dumps(out))
-PY
+python -m tools.collectors.gather_gcp > gcp-accounts.json        # active project
+python -m tools.collectors.gather_gcp --project a --project b > gcp-accounts.json
 python -m tools.collectors.gcp gcp-accounts.json > gcp-nhi.json
 ```
 
-A user-managed key is treated as a long-lived static credential; accounts without one are
-`managed`.
+Gathers service accounts, their keys, and — via one `projects get-iam-policy` read per
+project — each account's **IAM role bindings**. Bindings populate `scopes` and drive
+`privilege`: `roles/owner`/`roles/editor` are project-wide write and map to `admin`;
+`*Admin` and `roles/iam.*` roles map to `privileged`. A user-managed key is treated as a
+long-lived static credential; accounts without one are `managed`. Bundles without `roles`
+(the older path) omit `privilege`/`scopes` rather than guess. Caveat: bindings are
+project-level — folder/org-level and resource-level grants are not gathered, so an account
+can hold **more** than shown, never less.
 
 ## Agent tool manifests (agent *reach*)
 

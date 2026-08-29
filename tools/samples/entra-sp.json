@@ -1,30 +1,51 @@
 [
-  {
-    "id": "11111111-1111-1111-1111-111111111111",
-    "appId": "aaaa1111-0000-0000-0000-000000000001",
-    "displayName": "payments-connector",
-    "appOwnerOrganizationId": "TENANT-AAA",
-    "passwordCredentials": [
-      { "keyId": "p1", "startDateTime": "2024-01-15T00:00:00Z", "endDateTime": "2026-01-15T00:00:00Z" }
-    ],
-    "keyCredentials": []
-  },
-  {
-    "id": "22222222-2222-2222-2222-222222222222",
-    "appId": "aaaa1111-0000-0000-0000-000000000002",
-    "displayName": "reporting-federated",
-    "appOwnerOrganizationId": "TENANT-AAA",
-    "passwordCredentials": [],
-    "keyCredentials": []
-  },
-  {
-    "id": "33333333-3333-3333-3333-333333333333",
-    "appId": "aaaa1111-0000-0000-0000-000000000003",
-    "displayName": "vendor-analytics-app",
-    "appOwnerOrganizationId": "TENANT-ZZZ",
-    "passwordCredentials": [],
-    "keyCredentials": [
-      { "keyId": "c1", "startDateTime": "2025-06-01T00:00:00Z" }
-    ]
-  }
+ {
+  "id": "11111111-1111-1111-1111-111111111111",
+  "appId": "aaaa1111-0000-0000-0000-000000000001",
+  "displayName": "payments-connector",
+  "appOwnerOrganizationId": "TENANT-AAA",
+  "passwordCredentials": [
+   {
+    "keyId": "p1",
+    "startDateTime": "2024-01-15T00:00:00Z",
+    "endDateTime": "2026-01-15T00:00:00Z"
+   }
+  ],
+  "keyCredentials": [],
+  "appRoleAssignments": [
+   {
+    "appRoleId": "r1",
+    "resourceId": "graph",
+    "resourceDisplayName": "Microsoft Graph",
+    "appRoleValue": "Payments.ReadWrite.All"
+   }
+  ],
+  "oauth2PermissionGrants": [
+   {
+    "id": "g1",
+    "scope": "User.Read"
+   }
+  ]
+ },
+ {
+  "id": "22222222-2222-2222-2222-222222222222",
+  "appId": "aaaa1111-0000-0000-0000-000000000002",
+  "displayName": "reporting-federated",
+  "appOwnerOrganizationId": "TENANT-AAA",
+  "passwordCredentials": [],
+  "keyCredentials": []
+ },
+ {
+  "id": "33333333-3333-3333-3333-333333333333",
+  "appId": "aaaa1111-0000-0000-0000-000000000003",
+  "displayName": "vendor-analytics-app",
+  "appOwnerOrganizationId": "TENANT-ZZZ",
+  "passwordCredentials": [],
+  "keyCredentials": [
+   {
+    "keyId": "c1",
+    "startDateTime": "2025-06-01T00:00:00Z"
+   }
+  ]
+ }
 ]

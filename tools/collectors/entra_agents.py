@@ -61,7 +61,7 @@ def _display(principal: dict) -> str | None:
     )
 
 
-def _scopes(agent: dict) -> list[str]:
+def collect_scopes(agent: dict) -> list[str]:
     """Application roles + delegated scopes, as a flat, de-duplicated list."""
     out: list[str] = []
     for a in agent.get("appRoleAssignments") or []:
@@ -83,7 +83,7 @@ def _scopes(agent: dict) -> list[str]:
     return deduped
 
 
-def _privilege(scopes: list[str]) -> str:
+def infer_privilege(scopes: list[str]) -> str:
     low = [s.lower() for s in scopes]
     if any(any(h in s for h in _ADMIN_HINTS) for s in low):
         return "admin"
@@ -127,7 +127,7 @@ def transform(bundle, tenant_id: str | None = None,
         owners = a.get("owners") or []
         owner = _display(sponsors[0] if sponsors else (owners[0] if owners else None))
 
-        scopes = _scopes(a)
+        scopes = collect_scopes(a)
         app_roles = a.get("appRoleAssignments") or []
 
         owner_org = a.get("appOwnerOrganizationId")
@@ -140,7 +140,7 @@ def transform(bundle, tenant_id: str | None = None,
             owner=owner,
             # Entra carries no environment signal; assume production rather than under-report.
             environment="prod",
-            privilege=_privilege(scopes),
+            privilege=infer_privilege(scopes),
             credential=credential,
             secret_storage=("none" if credential == "federated" else "vault"),
             last_rotated_days=last_rotated,
