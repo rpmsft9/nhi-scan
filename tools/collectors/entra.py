@@ -23,7 +23,13 @@ def transform(service_principals: list[dict], tenant_id: str | None = None,
     for sp in service_principals:
         passwords = sp.get("passwordCredentials") or []
         certs = sp.get("keyCredentials") or []
-        if certs:
+        if sp.get("servicePrincipalType") == "ManagedIdentity":
+            # A managed identity authenticates with an Azure platform-issued X.509 cert that
+            # the platform rotates automatically. Its keyCredentials are not an owner-managed
+            # secret, so classify it as 'managed' — otherwise every managed identity surfaces
+            # as a long-lived-secret (NHI7) false positive once its visible cert ages out.
+            credential = "managed"
+        elif certs:
             credential = "certificate"
         elif passwords:
             credential = "static_secret"
@@ -42,7 +48,7 @@ def transform(service_principals: list[dict], tenant_id: str | None = None,
             type="service_principal",
             environment="prod",
             credential=credential,
-            secret_storage=("none" if credential == "federated" else "vault"),
+            secret_storage=("none" if credential in ("federated", "managed") else "vault"),
             last_rotated_days=last_rotated,
             third_party=(True if third_party else None),
         ))

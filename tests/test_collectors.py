@@ -31,7 +31,7 @@ def test_days_since_handles_formats():
 # --- Entra ----------------------------------------------------------------------------
 def test_entra_transform():
     recs = entra.transform(_load("entra-sp.json"), tenant_id="TENANT-AAA", now=NOW)
-    assert len(recs) == 3
+    assert len(recs) == 4
     assert _only_known(recs)
     by_name = {r["name"]: r for r in recs}
     assert by_name["payments-connector"]["credential"] == "static_secret"
@@ -41,6 +41,11 @@ def test_entra_transform():
     assert by_name["vendor-analytics-app"]["credential"] == "certificate"
     assert by_name["vendor-analytics-app"]["third_party"] is True
     assert "third_party" not in by_name["payments-connector"]  # same tenant -> omitted
+    # A managed identity's platform-issued cert is not an owner-managed secret: classify it
+    # 'managed' (no stored secret), so it is not flagged as a long-lived secret (NHI7).
+    mi = by_name["aks-workload-mi"]
+    assert mi["credential"] == "managed"
+    assert mi["secret_storage"] == "none"
 
 
 # --- AWS ------------------------------------------------------------------------------
@@ -183,6 +188,6 @@ def test_collector_output_scans(tmp_path):
     p = tmp_path / "merged.json"
     p.write_text(json.dumps(merged), encoding="utf-8")
     result = scan(load_fleet(p))
-    assert result.total == len(merged) == 10
+    assert result.total == len(merged) == 11
     # the plaintext admin internet-facing legacy key must land Tier 1
     assert any(a.tier.tier.value == 1 for a in result.assessments)
