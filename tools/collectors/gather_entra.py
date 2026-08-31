@@ -16,10 +16,12 @@ instead of flagging everything ownerless), ``appRoleAssignments`` (with each rol
 to its readable value, e.g. ``Files.Read.All``), and ``oauth2PermissionGrants`` — the
 permission surfaces that drive ``privilege``/``scopes`` in the transform.
 
-Cost: expansion issues three extra GETs per service principal (plus one per newly-seen resource
-to resolve role names). A large tenant with thousands of SPs takes a while — pass
-``--no-expand`` for a fast names-and-credentials pass, or ``--filter <substring>`` to expand
-only display names containing the substring.
+Cost: expansion reads three relationships per service principal (owners, delegated grants, app
+role assignments) plus one lookup per referenced resource, but every read goes through Graph
+``$batch`` (20 sub-requests per POST) — so a tenant with N SPs costs about ``ceil(3N/20)``
+requests, not ``3N`` sequential ``az rest`` calls (hundreds of SPs finish in a couple of minutes
+rather than tens). Pass ``--no-expand`` for a fast names-and-credentials pass, or
+``--filter <substring>`` to expand only display names containing the substring.
 
 Agent identities (``servicePrincipalType == "ServiceIdentity"``) are excluded here; gather
 those with :mod:`tools.collectors.gather_entra_agents`.
@@ -30,7 +32,64 @@ from __future__ import annotations
 import json
 import sys
 
-from .gather_entra_agents import GRAPH, az_rest, paged, tenant_id
+from .gather_entra_agents import GRAPH, az_batch, chunked, paged, tenant_id
+
+_RELATIONSHIPS = ("owners", "oauth2PermissionGrants", "appRoleAssignments")
+
+
+def _expand_grants(todo: list[dict]) -> None:
+    """Populate owners / oauth2PermissionGrants / appRoleAssignments on each SP in ``todo``.
+
+    Every per-principal read goes through Graph ``$batch`` (20 sub-requests per POST), so a
+    tenant with N service principals costs about ``ceil(3N / 20)`` requests instead of ``3N``
+    sequential ``az rest`` spawns. Resolved app-role *values* are attached to each assignment.
+    """
+    by_id = {sp["id"]: sp for sp in todo if sp.get("id")}
+
+    reqs, meta = [], {}
+    for sid in by_id:
+        for rel in _RELATIONSHIPS:
+            rid = str(len(reqs) + 1)
+            reqs.append({"id": rid, "method": "GET",
+                         "url": f"/servicePrincipals/{sid}/{rel}"})
+            meta[rid] = (sid, rel)
+
+    done = 0
+    for chunk in chunked(reqs):
+        for req_id, r in az_batch(chunk).items():
+            sid, rel = meta[req_id]
+            body = r.get("body") or {}
+            values = body.get("value") or []
+            nxt = body.get("@odata.nextLink")  # sub-requests aren't paged inside a batch
+            if nxt:
+                values = values + paged(nxt)
+            by_id[sid][rel] = values
+        done += len(chunk)
+        sys.stderr.write(f"\r# batched {done}/{len(reqs)} grant requests")
+    sys.stderr.write("\n")
+
+    # Resolve appRoleId -> readable value for every referenced resource, also batched.
+    resource_ids = sorted({a.get("resourceId")
+                           for sp in todo for a in (sp.get("appRoleAssignments") or [])
+                           if a.get("resourceId")})
+    role_reqs, role_meta = [], {}
+    for res in resource_ids:
+        rid = str(len(role_reqs) + 1)
+        role_reqs.append({"id": rid, "method": "GET",
+                          "url": f"/servicePrincipals/{res}?$select=appRoles"})
+        role_meta[rid] = res
+
+    role_names: dict[str, str] = {}
+    for chunk in chunked(role_reqs):
+        for req_id, r in az_batch(chunk).items():
+            res = role_meta[req_id]
+            for role in (r.get("body") or {}).get("appRoles") or []:
+                role_names[f"{res}:{role.get('id')}"] = role.get("value") or ""
+
+    for sp in todo:
+        for asg in sp.get("appRoleAssignments") or []:
+            rid, res = asg.get("appRoleId"), asg.get("resourceId")
+            asg["appRoleValue"] = role_names.get(f"{res}:{rid}") or None
 
 
 def main(argv: list[str]) -> int:
@@ -50,32 +109,10 @@ def main(argv: list[str]) -> int:
     sys.stderr.write(f"# {len(sps)} service principals (agent identities excluded)\n")
 
     if expand:
-        role_names: dict[str, str] = {}
         todo = [sp for sp in sps
                 if not name_filter or name_filter in (sp.get("displayName") or "").lower()]
-        sys.stderr.write(f"# expanding grants for {len(todo)} of {len(sps)}\n")
-        for i, sp in enumerate(todo, 1):
-            sid = sp.get("id")
-            if not sid:
-                continue
-            sys.stderr.write(f"\r# expanding {i}/{len(todo)}")
-            url = f"{base}/servicePrincipals/{sid}"
-            sp["owners"] = paged(f"{url}/owners")
-            sp["oauth2PermissionGrants"] = paged(f"{url}/oauth2PermissionGrants")
-
-            assignments = paged(f"{url}/appRoleAssignments")
-            for asg in assignments:
-                rid, res = asg.get("appRoleId"), asg.get("resourceId")
-                if not rid or not res:
-                    continue
-                if res not in role_names:
-                    resource = az_rest(f"{base}/servicePrincipals/{res}?$select=appRoles")
-                    for role in resource.get("appRoles") or []:
-                        role_names[f"{res}:{role.get('id')}"] = role.get("value") or ""
-                    role_names[res] = "_loaded"
-                asg["appRoleValue"] = role_names.get(f"{res}:{rid}") or None
-            sp["appRoleAssignments"] = assignments
-        sys.stderr.write("\n")
+        sys.stderr.write(f"# expanding grants for {len(todo)} of {len(sps)} via Graph $batch\n")
+        _expand_grants(todo)
 
     json.dump({"tenantId": tenant_id(), "servicePrincipals": sps}, sys.stdout, indent=2)
     sys.stdout.write("\n")
