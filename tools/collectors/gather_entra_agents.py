@@ -21,16 +21,15 @@ import json
 import subprocess
 import sys
 
+from .common import run_cli
+
 GRAPH = "https://graph.microsoft.com"
 
 
 def az_rest(url: str) -> dict:
     """GET a Graph URL through the Azure CLI session. Returns {} on a handled failure."""
     try:
-        raw = subprocess.check_output(
-            ["az", "rest", "--method", "GET", "--url", url, "-o", "json"],
-            stderr=subprocess.PIPE, text=True,
-        )
+        raw = run_cli(["az", "rest", "--method", "GET", "--url", url, "-o", "json"])
     except FileNotFoundError:
         sys.exit("az CLI not found. Install the Azure CLI, then run: az login --tenant <TENANT>")
     except subprocess.CalledProcessError as e:
@@ -52,8 +51,7 @@ def paged(url: str) -> list[dict]:
 
 def tenant_id() -> str | None:
     try:
-        acct = json.loads(subprocess.check_output(
-            ["az", "account", "show", "-o", "json"], text=True, stderr=subprocess.DEVNULL))
+        acct = json.loads(run_cli(["az", "account", "show", "-o", "json"]))
         return acct.get("tenantId")
     except Exception:
         return None

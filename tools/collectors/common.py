@@ -9,6 +9,9 @@ keeps them safe, decoupled from auth, and testable offline against recorded samp
 from __future__ import annotations
 
 import json
+import os
+import shutil
+import subprocess
 import sys
 from datetime import datetime, timezone
 from typing import Iterable
@@ -64,11 +67,40 @@ def record(**kw) -> dict:
 
 
 def read_input(argv: list[str]):
-    """Load JSON from a file argument, or from stdin if none/`-` is given."""
+    """Load JSON from a file argument, or from stdin if none/`-` is given.
+
+    Reads as UTF-8 tolerant of a leading byte-order mark (``utf-8-sig``). Windows shells
+    (PowerShell's ``>`` redirection, ``Out-File``) prepend a BOM, and plain ``json.load`` on
+    a BOM-prefixed file raises ``Unexpected UTF-8 BOM`` — so a bundle produced on Windows and
+    piped back in would fail without this.
+    """
     if len(argv) > 1 and argv[1] not in ("-", ""):
-        with open(argv[1], encoding="utf-8") as f:
+        with open(argv[1], encoding="utf-8-sig") as f:
             return json.load(f)
-    return json.load(sys.stdin)
+    return json.loads(sys.stdin.buffer.read().decode("utf-8-sig"))
+
+
+def run_cli(args: list[str]) -> str:
+    """Run a read-only CLI command (``az`` / ``aws`` / ``gcloud``) and return its stdout.
+
+    Cross-platform. On Windows these CLIs ship as ``.cmd`` shims (``az.cmd``, ``gcloud.cmd``)
+    that ``CreateProcess`` cannot launch directly, so ``subprocess([...])`` raises
+    ``FileNotFoundError`` there — the reason the gather scripts previously failed on Windows.
+    This resolves the executable via ``PATH`` (honouring ``PATHEXT``) and, on Windows, runs it
+    through ``cmd.exe`` with every argument explicitly double-quoted, so URL query
+    metacharacters (``$select``, ``?``, ``&``, parentheses) are passed through literally rather
+    than interpreted by the shell. On POSIX the argument list is executed directly, no shell.
+
+    Raises ``FileNotFoundError`` if the executable is not on ``PATH`` and
+    ``subprocess.CalledProcessError`` on a non-zero exit, so callers keep their own messaging.
+    """
+    exe = shutil.which(args[0])
+    if exe is None:
+        raise FileNotFoundError(args[0])
+    if os.name == "nt":
+        cmdline = " ".join('"{}"'.format(str(a).replace('"', '""')) for a in (exe, *args[1:]))
+        return subprocess.check_output(cmdline, shell=True, text=True, stderr=subprocess.PIPE)
+    return subprocess.check_output([exe, *args[1:]], text=True, stderr=subprocess.PIPE)
 
 
 def emit(records: list[dict]) -> None:

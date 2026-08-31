@@ -10,6 +10,13 @@ every collector against the recorded samples in [`../samples`](../samples).
 
 The flow is always: **collect (per source) → merge → scan.**
 
+> **Running the collectors.** Invoke them as modules from the **repository root** (the folder
+> containing `tools/`), e.g. `python -m tools.collectors.entra ...`. Running from inside
+> `tools/collectors/` raises `ModuleNotFoundError: No module named 'tools'`. The collectors are
+> **cross-platform** (Linux, macOS, Windows) — the `gather_*` scripts locate `az`/`aws`/`gcloud`
+> on `PATH` on every OS, and every collector reads JSON tolerant of a UTF-8 BOM, so bundles
+> produced by Windows PowerShell (`>` / `Out-File`) feed straight back in.
+
 ## Entra ID (Azure AD)
 
 Read-only permission: `Application.Read.All` (or `Directory.Read.All`); Global Reader is a
