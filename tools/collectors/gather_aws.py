@@ -24,11 +24,12 @@ import json
 import subprocess
 import sys
 
+from .common import run_cli
+
 
 def aws(*args) -> dict:
     try:
-        raw = subprocess.check_output(["aws", *args, "--output", "json"],
-                                      stderr=subprocess.PIPE, text=True)
+        raw = run_cli(["aws", *args, "--output", "json"])
     except FileNotFoundError:
         sys.exit("aws CLI not found. Install it and configure read-only credentials first.")
     except subprocess.CalledProcessError as e:

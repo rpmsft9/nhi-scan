@@ -29,10 +29,9 @@ of double-counted agents.
 
 from __future__ import annotations
 
-import sys
 from datetime import datetime
 
-from .common import days_since, emit, newest, record
+from .common import days_since, emit, newest, read_input, record
 from .entra_agents import collect_scopes, display_handle, infer_privilege
 
 
@@ -103,8 +102,7 @@ def main(argv: list[str]) -> int:
         i = args.index("--tenant")
         tenant = args[i + 1] if i + 1 < len(args) else None
         del args[i:i + 2]
-    import json
-    data = json.load(open(args[0], encoding="utf-8")) if args else json.load(sys.stdin)
+    data = read_input([argv[0], *args])
     emit(transform(data, tenant_id=tenant))
     return 0
 

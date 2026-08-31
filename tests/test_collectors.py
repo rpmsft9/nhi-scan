@@ -2,10 +2,12 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+import sys
+
 from nhiscan.ingest import load_fleet
 from nhiscan.scan import scan
 from tools.collectors import aws, csv_import, entra, entra_agents, gcp, mcp
-from tools.collectors.common import KNOWN_FIELDS, days_since
+from tools.collectors.common import KNOWN_FIELDS, days_since, read_input, run_cli
 
 SAMPLES = Path(__file__).resolve().parents[1] / "tools" / "samples"
 NOW = datetime(2026, 8, 9, tzinfo=timezone.utc)
@@ -26,6 +28,24 @@ def test_days_since_handles_formats():
     assert days_since("2026-07-10", now=NOW) == 30
     assert days_since(None, now=NOW) is None
     assert days_since("not-a-date", now=NOW) is None
+
+
+def test_read_input_tolerates_utf8_bom(tmp_path):
+    # Windows PowerShell (`>`, Out-File) prepends a UTF-8 BOM; plain json.load rejects it.
+    p = tmp_path / "bundle.json"
+    p.write_bytes(b'\xef\xbb\xbf[{"id": "x", "name": "y"}]')
+    assert read_input(["prog", str(p)]) == [{"id": "x", "name": "y"}]
+
+
+def test_load_fleet_tolerates_utf8_bom(tmp_path):
+    p = tmp_path / "inventory.json"
+    p.write_bytes(b'\xef\xbb\xbf[{"id": "a", "name": "a"}]')
+    assert len(load_fleet(p)) == 1
+
+
+def test_run_cli_executes_cross_platform():
+    # Exercises the platform-specific launch path (cmd.exe on Windows, direct on POSIX).
+    assert "nhi-ok" in run_cli([sys.executable, "-c", "print('nhi-ok')"])
 
 
 # --- Entra ----------------------------------------------------------------------------
