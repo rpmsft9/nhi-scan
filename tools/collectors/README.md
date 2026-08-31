@@ -41,9 +41,12 @@ transform can tell owned from orphaned instead of flagging every SP under NHI1. 
 each principal's **app-role assignments and delegated grants** populate `scopes` and drive
 `privilege`, so overprivilege (NHI5) and wildcard detection can fire. Without grant data,
 `privilege`/`scopes` are omitted rather than guessed — and overprivilege findings won't fire
-for those records. Expansion costs two extra GETs per principal (`--no-expand` or
-`--filter <substring>` to limit it). Agent identities (`ServiceIdentity`) are excluded — use
-the Entra Agent ID collector below, and merging the two stays double-count-free.
+for those records. Expansion reads three relationships per principal (owners, delegated grants,
+app-role assignments) plus one lookup per referenced resource, all issued through Microsoft
+Graph `$batch` (20 sub-requests per call) — so hundreds of principals finish in a couple of
+minutes rather than one `az rest` per read; `--no-expand` or `--filter <substring>` limit it.
+Agent identities (`ServiceIdentity`) are excluded — use the Entra Agent ID collector below, and
+merging the two stays double-count-free.
 
 ## Entra Agent ID (AI agent identities)
 
