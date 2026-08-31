@@ -48,6 +48,50 @@ def test_run_cli_executes_cross_platform():
     assert "nhi-ok" in run_cli([sys.executable, "-c", "print('nhi-ok')"])
 
 
+def test_chunked_splits_into_batches():
+    from tools.collectors.gather_entra_agents import chunked
+    assert list(chunked([1, 2, 3, 4, 5], 2)) == [[1, 2], [3, 4], [5]]
+
+
+def _batch_body_requests(args):
+    # az_batch passes the batch payload as `--body @<tempfile>`; read it back.
+    path = args[args.index("--body") + 1][1:]
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)["requests"]
+
+
+def test_az_batch_maps_responses_by_id(monkeypatch):
+    from tools.collectors import gather_entra_agents as g
+
+    def fake_run_cli(args):
+        reqs = _batch_body_requests(args)
+        return json.dumps({"responses": [
+            {"id": r["id"], "status": 200, "body": {"value": [{"from": r["url"]}]}}
+            for r in reqs]})
+
+    monkeypatch.setattr(g, "run_cli", fake_run_cli)
+    out = g.az_batch([{"id": "1", "method": "GET", "url": "/a"},
+                      {"id": "2", "method": "GET", "url": "/b"}])
+    assert out["1"]["body"]["value"] == [{"from": "/a"}]
+    assert set(out) == {"1", "2"}
+
+
+def test_az_batch_retries_throttled_subrequests(monkeypatch):
+    from tools.collectors import gather_entra_agents as g
+    seen = {"first": True}
+
+    def fake_run_cli(args):
+        reqs = _batch_body_requests(args)
+        status = 429 if seen["first"] else 200
+        seen["first"] = False
+        return json.dumps({"responses": [{"id": r["id"], "status": status} for r in reqs]})
+
+    monkeypatch.setattr(g, "run_cli", fake_run_cli)
+    monkeypatch.setattr(g.time, "sleep", lambda *_: None)
+    out = g.az_batch([{"id": "1", "method": "GET", "url": "/a"}])
+    assert out["1"]["status"] == 200  # recovered on retry
+
+
 # --- Entra ----------------------------------------------------------------------------
 def test_entra_transform():
     recs = entra.transform(_load("entra-sp.json"), tenant_id="TENANT-AAA", now=NOW)
