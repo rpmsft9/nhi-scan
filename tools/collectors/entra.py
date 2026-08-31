@@ -29,6 +29,7 @@ of double-counted agents.
 
 from __future__ import annotations
 
+import sys
 from datetime import datetime
 
 from .common import days_since, emit, newest, read_input, record

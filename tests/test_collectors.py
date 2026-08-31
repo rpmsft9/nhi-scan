@@ -80,6 +80,18 @@ def test_entra_transform():
     assert "owner" not in by_name["payments-connector"]
 
 
+def test_entra_runs_as_module(tmp_path):
+    # Exercises the real `python -m tools.collectors.entra` entrypoint (the __main__ block and
+    # its sys.argv use), which importing transform() directly would not catch.
+    import subprocess
+    out = subprocess.check_output(
+        [sys.executable, "-m", "tools.collectors.entra", str(SAMPLES / "entra-sp.json"),
+         "--tenant", "TENANT-AAA"],
+        cwd=str(Path(__file__).resolve().parents[1]), text=True)
+    recs = json.loads(out)
+    assert isinstance(recs, list) and len(recs) == 4
+
+
 def test_entra_skips_agent_identities():
     sps = _load("entra-sp.json") + [{
         "id": "agent-1", "displayName": "some-agent",
