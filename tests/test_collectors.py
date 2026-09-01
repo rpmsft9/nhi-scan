@@ -6,7 +6,7 @@ import sys
 
 from nhiscan.ingest import load_fleet
 from nhiscan.scan import scan
-from tools.collectors import aws, csv_import, entra, entra_agents, gcp, mcp
+from tools.collectors import aws, csv_import, entra, entra_agents, gather_okta, gcp, mcp, okta
 from tools.collectors.common import KNOWN_FIELDS, days_since, read_input, run_cli
 
 SAMPLES = Path(__file__).resolve().parents[1] / "tools" / "samples"
@@ -234,6 +234,54 @@ def test_csv_transform():
     assert legacy["secret_storage"] == "plaintext"
     assert "last_rotated_days" not in legacy  # blank int -> omitted
 
+
+
+# --- Okta -----------------------------------------------------------------------------
+def test_okta_transform():
+    recs = okta.transform(_load("okta-apps.json"), now=NOW)
+    assert len(recs) == 3
+    assert _only_known(recs)
+    by_name = {r["name"]: r for r in recs}
+
+    # OAuth service app with a client secret; the okta.apps.manage grant makes it privileged
+    pay = by_name["payments-service"]
+    assert pay["type"] == "oauth_app"
+    assert pay["credential"] == "static_secret"
+    assert pay["privilege"] == "privileged"
+    assert "okta.apps.manage" in pay["scopes"]
+
+    # private_key_jwt => certificate (no shared secret); read-only-ish grant stays scoped
+    rep = by_name["reporting-jwt"]
+    assert rep["credential"] == "certificate"
+    assert rep["privilege"] == "scoped"
+
+    # API token => api_key (NHI4), rotation age from creation (long-lived => NHI7), owner = creator
+    tok = by_name["ci-deploy-token"]
+    assert tok["type"] == "api_key"
+    assert tok["credential"] == "api_key"
+    assert tok["owner"] == "00uadmin1"
+    assert tok["last_rotated_days"] > 900
+
+
+def test_okta_without_grants_omits_privilege():
+    apps = [{"id": "0oa9", "label": "no-grants-app",
+             "settings": {"oauthClient": {"token_endpoint_auth_method": "client_secret_basic"}}}]
+    rec = okta.transform({"apps": apps}, now=NOW)[0]
+    assert "privilege" not in rec and "scopes" not in rec  # not gathered -> not guessed
+
+
+def test_okta_next_link_parses_cursor():
+    hdr = ('<https://x.okta.com/api/v1/apps?limit=200>; rel="self", '
+           '<https://x.okta.com/api/v1/apps?after=abc123&limit=200>; rel="next"')
+    assert gather_okta.next_link(hdr) == "https://x.okta.com/api/v1/apps?after=abc123&limit=200"
+    assert gather_okta.next_link('<https://x.okta.com/api/v1/apps>; rel="self"') is None
+
+
+def test_okta_output_scans(tmp_path):
+    recs = okta.transform(_load("okta-apps.json"), now=NOW)
+    p = tmp_path / "okta.json"
+    p.write_text(json.dumps(recs), encoding="utf-8")
+    assert scan(load_fleet(p)).total == 3
 
 
 # --- Entra Agent ID -------------------------------------------------------------------
