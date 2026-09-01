@@ -4,10 +4,13 @@ from pathlib import Path
 
 import sys
 
+import pytest
+
+from nhiscan import report
 from nhiscan.ingest import load_fleet
 from nhiscan.scan import scan
 from tools.collectors import aws, csv_import, entra, entra_agents, gather_okta, gcp, mcp, okta
-from tools.collectors.common import KNOWN_FIELDS, days_since, read_input, run_cli
+from tools.collectors.common import KNOWN_FIELDS, _assert_shell_safe, days_since, read_input, run_cli
 
 SAMPLES = Path(__file__).resolve().parents[1] / "tools" / "samples"
 NOW = datetime(2026, 8, 9, tzinfo=timezone.utc)
@@ -46,6 +49,43 @@ def test_load_fleet_tolerates_utf8_bom(tmp_path):
 def test_run_cli_executes_cross_platform():
     # Exercises the platform-specific launch path (cmd.exe on Windows, direct on POSIX).
     assert "nhi-ok" in run_cli([sys.executable, "-c", "print('nhi-ok')"])
+
+
+def test_assert_shell_safe_rejects_breakout_chars():
+    # A real percent-encoded Graph URL (with & and %) is fine...
+    _assert_shell_safe(["az", "rest", "--url",
+                        "https://graph.microsoft.com/v1.0/x?$select=a%2cb&$top=2"])
+    # ...but a quote or newline that could break out of the cmd.exe quoting is refused.
+    for bad in ['a"b', "a\nb", "a\x00b"]:
+        with pytest.raises(ValueError):
+            _assert_shell_safe(["az", bad])
+
+
+# --- security hardening: Okta gatherer ------------------------------------------------
+def test_okta_build_request_keeps_token_off_redirects():
+    req = gather_okta.build_request("https://x.okta.com/api/v1/apps", "SECRET-TOKEN")
+    # Authorization is an *unredirected* header, so urllib won't resend it on a cross-host 3xx.
+    assert "Authorization" in req.unredirected_hdrs
+    assert "Authorization" not in req.headers
+
+
+def test_okta_requires_https(monkeypatch):
+    monkeypatch.setenv("OKTA_ORG_URL", "http://insecure.okta.com")
+    monkeypatch.setenv("OKTA_API_TOKEN", "t")
+    with pytest.raises(SystemExit):
+        gather_okta.main(["gather_okta"])   # exits before any network call
+
+
+# --- security hardening: Markdown report escaping -------------------------------------
+def test_markdown_report_escapes_identity_controlled_text(tmp_path):
+    inv = [{"id": "x", "name": "evil <script> `x` [z](javascript:1) | pipe",
+            "type": "api_key", "credential": "static_secret", "last_rotated_days": 999}]
+    p = tmp_path / "inv.json"
+    p.write_text(json.dumps(inv), encoding="utf-8")
+    md = report.to_markdown(scan(load_fleet(p)))
+    assert "<script>" not in md and "&lt;script&gt;" in md   # raw HTML neutralized
+    assert "`x`" not in md                                    # backticks escaped
+    assert "](javascript:" not in md                          # link syntax escaped
 
 
 def test_chunked_splits_into_batches():

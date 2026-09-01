@@ -80,6 +80,23 @@ def read_input(argv: list[str]):
     return json.loads(sys.stdin.buffer.read().decode("utf-8-sig"))
 
 
+# Characters that must never reach the Windows cmd.exe command line, even inside double quotes:
+# a literal quote could close the quoting, and CR/NL/NUL could split or truncate the command.
+_UNSAFE_SHELL_CHARS = ('"', "\n", "\r", "\x00")
+
+
+def _assert_shell_safe(args) -> None:
+    """Defence-in-depth for the Windows ``shell=True`` path (see :func:`run_cli`).
+
+    All arguments are built internally — fixed CLI flags, API URLs delivered over TLS, GUID
+    resource ids, and temp-file paths — never untrusted free text. As a backstop, refuse any
+    argument carrying a character that could break out of the per-argument quoting.
+    """
+    for a in args:
+        if any(c in str(a) for c in _UNSAFE_SHELL_CHARS):
+            raise ValueError(f"refusing to shell-execute argument with unsafe character: {a!r}")
+
+
 def run_cli(args: list[str]) -> str:
     """Run a read-only CLI command (``az`` / ``aws`` / ``gcloud``) and return its stdout.
 
@@ -87,18 +104,24 @@ def run_cli(args: list[str]) -> str:
     that ``CreateProcess`` cannot launch directly, so ``subprocess([...])`` raises
     ``FileNotFoundError`` there — the reason the gather scripts previously failed on Windows.
     This resolves the executable via ``PATH`` (honouring ``PATHEXT``) and, on Windows, runs it
-    through ``cmd.exe`` with every argument explicitly double-quoted, so URL query
-    metacharacters (``$select``, ``?``, ``&``, parentheses) are passed through literally rather
-    than interpreted by the shell. On POSIX the argument list is executed directly, no shell.
+    through ``cmd.exe`` with every argument double-quoted, so URL query metacharacters
+    (``$select``, ``?``, ``&``, parentheses) are passed through literally rather than interpreted
+    by the shell. On POSIX the argument list is executed directly, no shell.
 
-    Raises ``FileNotFoundError`` if the executable is not on ``PATH`` and
-    ``subprocess.CalledProcessError`` on a non-zero exit, so callers keep their own messaging.
+    The Windows path uses ``shell=True`` out of necessity (the ``.cmd`` shim), so every argument
+    is first checked by :func:`_assert_shell_safe`; the arguments are internally constructed, so
+    this only ever fires on a bug, not on normal input.
+
+    Raises ``FileNotFoundError`` if the executable is not on ``PATH``, ``ValueError`` on an unsafe
+    argument, and ``subprocess.CalledProcessError`` on a non-zero exit — callers keep their own
+    messaging.
     """
     exe = shutil.which(args[0])
     if exe is None:
         raise FileNotFoundError(args[0])
     if os.name == "nt":
-        cmdline = " ".join('"{}"'.format(str(a).replace('"', '""')) for a in (exe, *args[1:]))
+        _assert_shell_safe([exe, *args[1:]])
+        cmdline = " ".join('"{}"'.format(a) for a in (exe, *args[1:]))
         return subprocess.check_output(cmdline, shell=True, text=True, stderr=subprocess.PIPE)
     return subprocess.check_output([exe, *args[1:]], text=True, stderr=subprocess.PIPE)
 
