@@ -10,6 +10,12 @@ every collector against the recorded samples in [`../samples`](../samples).
 
 The flow is always: **collect (per source) → merge → scan.**
 
+**Prerequisites & roles** — for the CLI each source needs (with macOS/Windows install commands)
+and the least-privilege read-only role per platform (Entra, Entra Agent ID, AWS, GCP, and
+Okta/Ping via CSV), see [Prerequisites](../../README.md#prerequisites) and
+[Required roles & permissions](../../README.md#required-roles--permissions) in the top-level README.
+Each section below also states its own read-only permission.
+
 > **Running the collectors.** Invoke them as modules from the **repository root** (the folder
 > containing `tools/`), e.g. `python -m tools.collectors.entra ...`. Running from inside
 > `tools/collectors/` raises `ModuleNotFoundError: No module named 'tools'`. The collectors are
