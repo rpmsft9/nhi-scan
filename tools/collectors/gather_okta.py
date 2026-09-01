@@ -40,12 +40,17 @@ def next_link(link_header: str) -> str | None:
     return None
 
 
+def build_request(url: str, token: str) -> urllib.request.Request:
+    """Build the signed GET. The API token is added as an *unredirected* header so urllib will
+    not resend it if the server responds with a cross-origin redirect (which would leak the
+    token to another host)."""
+    req = urllib.request.Request(url, headers={"Accept": "application/json"})
+    req.add_unredirected_header("Authorization", f"SSWS {token}")
+    return req
+
+
 def _request(url: str, token: str):
-    req = urllib.request.Request(url, headers={
-        "Authorization": f"SSWS {token}",
-        "Accept": "application/json",
-    })
-    with urllib.request.urlopen(req) as resp:           # noqa: S310 (trusted org URL)
+    with urllib.request.urlopen(build_request(url, token)) as resp:   # noqa: S310 (https-only, validated)
         body = resp.read().decode("utf-8")
         link = resp.headers.get("Link", "")
     return (json.loads(body) if body.strip() else []), link
@@ -79,6 +84,9 @@ def main(argv: list[str]) -> int:
     token = os.environ.get("OKTA_API_TOKEN")
     if not org or not token:
         sys.exit(f"OKTA_ORG_URL / OKTA_API_TOKEN not set. {_HELP}")
+    # Require TLS: the SSWS token must never travel over plaintext http:// (nor a file:// URL).
+    if not org.lower().startswith("https://"):
+        sys.exit(f"OKTA_ORG_URL must be an https:// URL (got: {org!r}).")
 
     expand = "--no-expand" not in argv
     all_apps = "--all-apps" in argv
