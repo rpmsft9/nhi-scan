@@ -1,0 +1,14 @@
+# gitleaks configuration for nhi-scan.
+# Keeps the full default rule set and adds a narrow allowlist for fixture directories, whose
+# "tokens" are non-secret placeholders (e.g. SSWS <token>, SECRET-TOKEN) used by offline tests.
+title = "nhi-scan"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Test fixtures and recorded samples contain placeholder, non-secret values only."
+paths = [
+  '''tools/samples/.*''',
+  '''tests/.*''',
+]
