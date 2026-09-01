@@ -1,0 +1,45 @@
+{
+  "orgUrl": "https://example.okta.com",
+  "apps": [
+    {
+      "id": "0oa1payments",
+      "label": "payments-service",
+      "status": "ACTIVE",
+      "signOnMode": "OPENID_CONNECT",
+      "settings": {
+        "oauthClient": {
+          "grant_types": ["client_credentials"],
+          "token_endpoint_auth_method": "client_secret_basic"
+        }
+      },
+      "grants": [
+        { "scopeId": "okta.users.read" },
+        { "scopeId": "okta.apps.manage" }
+      ]
+    },
+    {
+      "id": "0oa2reporting",
+      "label": "reporting-jwt",
+      "status": "ACTIVE",
+      "signOnMode": "OPENID_CONNECT",
+      "settings": {
+        "oauthClient": {
+          "grant_types": ["client_credentials"],
+          "token_endpoint_auth_method": "private_key_jwt"
+        }
+      },
+      "grants": [
+        { "scopeId": "okta.logs.read" }
+      ]
+    }
+  ],
+  "apiTokens": [
+    {
+      "id": "00Tci",
+      "name": "ci-deploy-token",
+      "userId": "00uadmin1",
+      "created": "2022-01-01T00:00:00.000Z",
+      "lastUpdated": "2022-01-01T00:00:00.000Z"
+    }
+  ]
+}

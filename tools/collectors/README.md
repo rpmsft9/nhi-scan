@@ -94,6 +94,32 @@ agent under it.
 Copilot Studio, or its MCP config. Collect it with the [agent tool-manifest collector](#agent-tool-manifests-agent-reach)
 and merge on `id` to make `nhi-scan diff` able to catch reach growth.
 
+## Okta
+
+Read-only permission: a **Read-Only Administrator** SSWS token, or an OAuth token with
+`okta.apps.read` + `okta.apiTokens.read`. Okta has no CLI session to borrow, so auth comes from
+your environment and is used only to sign the read-only GETs (never stored):
+
+```bash
+export OKTA_ORG_URL=https://your-org.okta.com
+export OKTA_API_TOKEN=<SSWS token>        # PowerShell: $env:OKTA_API_TOKEN="..."
+python -m tools.collectors.gather_okta > okta-bundle.json
+python -m tools.collectors.okta okta-bundle.json > okta-nhi.json
+```
+
+Inventories the two non-human identity classes Okta exposes:
+
+| Emitted | Derived from |
+| --- | --- |
+| `type: oauth_app` | OAuth **service apps** (the `client_credentials` grant — machine-to-machine). `--all-apps` includes every app; default is service apps only |
+| `credential` | `private_key_jwt` → certificate; `client_secret_*` → static secret; `none` → federated |
+| `scopes` / `privilege` | each app's **granted OAuth scopes** (`okta.*.manage` → privileged, `okta.*` → admin). Gathered per app; `--no-expand` skips it, and then privilege/scopes are omitted rather than guessed |
+| `type: api_key` | org **API tokens** (`/api/v1/api-tokens`) — long-lived static secrets, so NHI4 fires; rotation age from the token's creation date surfaces never-rotated tokens under NHI7 |
+| `owner` (API tokens) | the token's creator (`userId`) — the closest accountable human |
+
+Uses only the Python standard library (no extra HTTP dependency). Pagination follows Okta's
+`Link: rel="next"` cursor.
+
 ## AWS IAM
 
 Read-only permission: the AWS-managed `IAMReadOnlyAccess` policy.
