@@ -33,7 +33,7 @@ import sys
 from datetime import datetime
 
 from .common import days_since, emit, newest, read_input, record
-from .entra_agents import collect_scopes, display_handle, infer_privilege
+from .entra_agents import collect_scopes, display_handle, infer_privilege, owner_liveness
 
 
 def transform(data, tenant_id: str | None = None,
@@ -78,7 +78,8 @@ def transform(data, tenant_id: str | None = None,
         scopes = collect_scopes(sp) if has_grant_data else []
 
         owners = sp.get("owners") or []
-        owner = display_handle(owners[0]) if owners else None
+        owner_obj = owners[0] if owners else None
+        owner = display_handle(owner_obj) if owner_obj else None
 
         out.append(record(
             id=sp.get("id") or sp.get("appId"),
@@ -86,6 +87,7 @@ def transform(data, tenant_id: str | None = None,
             type="service_principal",
             environment="prod",
             owner=owner,
+            owner_active=owner_liveness(owner_obj),
             credential=credential,
             secret_storage=("none" if credential in ("federated", "managed") else "vault"),
             last_rotated_days=last_rotated,

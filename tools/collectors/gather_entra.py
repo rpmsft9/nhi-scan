@@ -50,8 +50,12 @@ def _expand_grants(todo: list[dict]) -> None:
     for sid in by_id:
         for rel in _RELATIONSHIPS:
             rid = str(len(reqs) + 1)
-            reqs.append({"id": rid, "method": "GET",
-                         "url": f"/servicePrincipals/{sid}/{rel}"})
+            rel_url = f"/servicePrincipals/{sid}/{rel}"
+            if rel == "owners":
+                # accountEnabled lets the transform judge owner *validity* (a deprovisioned
+                # owner = effectively orphaned), not just presence.
+                rel_url += "?$select=id,displayName,userPrincipalName,mail,accountEnabled"
+            reqs.append({"id": rid, "method": "GET", "url": rel_url})
             meta[rid] = (sid, rel)
 
     done = 0

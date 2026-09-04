@@ -86,7 +86,12 @@ def to_markdown(result: ScanResult) -> str:
     out.append("## Identities by risk\n")
     for a in result.by_risk:
         n = a.nhi
-        owner = _md(n.owner) if n.owner else "_orphaned_"
+        if n.owner and n.owner_active is False:
+            owner = f"{_md(n.owner)} _(deprovisioned)_"
+        elif n.owner:
+            owner = _md(n.owner)
+        else:
+            owner = "_orphaned_"
         out.append(f"### {_TIER_BADGE[int(a.tier.tier)]} — {_md(n.name)} `({n.type.value})`")
         out.append(
             f"- **Owner:** {owner} · **Env:** {n.environment.value} · "

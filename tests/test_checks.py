@@ -102,3 +102,28 @@ def test_findings_sorted_by_severity():
              privilege=Privilege.ADMIN, exposure=Exposure.INTERNET, last_rotated_days=None)
     weights = [f.severity.weight for f in run_checks(n)]
     assert weights == sorted(weights, reverse=True)
+
+
+# --- owner validity (presence vs. liveness) -----------------------------------------
+def test_deprovisioned_owner_is_high_nhi1():
+    n = _nhi(owner="jane@example", owner_active=False)
+    f = next(x for x in run_checks(n) if x.owasp_id == "NHI1:2025")
+    assert f.severity is Severity.HIGH
+    assert "no longer an active account" in f.evidence.lower()
+
+
+def test_missing_owner_is_medium_nhi1():
+    n = _nhi(owner=None)
+    f = next(x for x in run_checks(n) if x.owasp_id == "NHI1:2025")
+    assert f.severity is Severity.MEDIUM
+
+
+def test_live_owner_has_no_orphan_finding():
+    n = _nhi(owner="jane@example", owner_active=True)
+    assert "NHI1:2025" not in _codes(n)
+
+
+def test_unknown_owner_liveness_is_backward_compatible():
+    # owner present, liveness unknown (None default) -> not orphaned, as before
+    n = _nhi(owner="jane@example")
+    assert "NHI1:2025" not in _codes(n)

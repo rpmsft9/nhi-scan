@@ -148,6 +148,7 @@ class NHI:
     name: str
     type: NHIType = NHIType.SERVICE_ACCOUNT
     owner: Optional[str] = None
+    owner_active: Optional[bool] = None       # True=owner enabled, False=deprovisioned, None=unknown
     environment: Environment = Environment.PROD
     privilege: Privilege = Privilege.SCOPED
     credential: CredentialType = CredentialType.STATIC_SECRET
@@ -172,8 +173,19 @@ class NHI:
         return len(self.tools) + len(self.scopes)
 
     @property
+    def orphan_reason(self) -> Optional[str]:
+        """Why this identity is orphaned, or None if it has a live, accountable owner.
+        An owner recorded but no longer an active account is the real 'improper
+        offboarding' (NHI1) case: the owner left, the identity was left behind."""
+        if not (self.owner and self.owner.strip()):
+            return "no owner recorded"
+        if self.owner_active is False:
+            return "owner deprovisioned"
+        return None
+
+    @property
     def is_orphaned(self) -> bool:
-        return not (self.owner and self.owner.strip())
+        return self.orphan_reason is not None
 
     @property
     def has_static_secret(self) -> bool:

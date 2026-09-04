@@ -398,3 +398,20 @@ def test_collector_output_scans(tmp_path):
     assert result.total == len(merged) == 12
     # the plaintext admin internet-facing legacy key must land Tier 1
     assert any(a.tier.tier.value == 1 for a in result.assessments)
+
+
+def test_entra_owner_liveness():
+    sps = [
+        {"id": "sp-live", "displayName": "Live", "appId": "app-live",
+         "owners": [{"userPrincipalName": "jane@x", "accountEnabled": True}]},
+        {"id": "sp-dead", "displayName": "Dead", "appId": "app-dead",
+         "owners": [{"userPrincipalName": "gone@x", "accountEnabled": False}]},
+        {"id": "sp-grp", "displayName": "GroupOwned", "appId": "app-grp",
+         "owners": [{"displayName": "some-group"}]},   # no accountEnabled -> unknown
+        {"id": "sp-none", "displayName": "Orphan", "appId": "app-none", "owners": []},
+    ]
+    recs = {r["id"]: r for r in entra.transform(sps, tenant_id="TENANT-AAA", now=NOW)}
+    assert recs["sp-live"]["owner_active"] is True
+    assert recs["sp-dead"]["owner_active"] is False
+    assert "owner_active" not in recs["sp-grp"] and "owner" in recs["sp-grp"]
+    assert "owner" not in recs["sp-none"] and "owner_active" not in recs["sp-none"]

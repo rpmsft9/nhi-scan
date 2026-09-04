@@ -75,3 +75,15 @@ def test_reasons_sorted_most_severe_first():
     reasons = tiering.assess(n).reasons
     floors = [int(r.floor) for r in reasons]
     assert floors == sorted(floors)
+
+
+def test_privileged_deprovisioned_owner_is_tier1():
+    n = _nhi(privilege=Privilege.ADMIN, credential=CredentialType.FEDERATED,
+             owner="jane@example", owner_active=False)
+    assert tiering.assess(n).tier is RiskTier.TIER_1
+
+
+def test_privileged_live_owner_is_not_tier1_orphan():
+    n = _nhi(privilege=Privilege.ADMIN, credential=CredentialType.FEDERATED,
+             owner="jane@example", owner_active=True)
+    assert tiering.assess(n).tier is not RiskTier.TIER_1

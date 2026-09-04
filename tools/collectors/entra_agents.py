@@ -61,6 +61,17 @@ def display_handle(principal: dict) -> str | None:
     )
 
 
+def owner_liveness(principal: dict | None) -> bool | None:
+    """Tri-state liveness of an owner/sponsor directory object, for owner *validity*
+    (not just presence). True = account enabled; False = disabled/deprovisioned — the
+    real 'improper offboarding' case; None = unknown (field not gathered, or a group
+    owner that carries no accountEnabled). Requires the enriched gather to $select it."""
+    if not isinstance(principal, dict):
+        return None
+    val = principal.get("accountEnabled")
+    return val if isinstance(val, bool) else None
+
+
 def collect_scopes(agent: dict) -> list[str]:
     """Application roles + delegated scopes, as a flat, de-duplicated list."""
     out: list[str] = []
@@ -125,7 +136,8 @@ def transform(bundle, tenant_id: str | None = None,
 
         sponsors = a.get("sponsors") or []
         owners = a.get("owners") or []
-        owner = display_handle(sponsors[0] if sponsors else (owners[0] if owners else None))
+        owner_obj = sponsors[0] if sponsors else (owners[0] if owners else None)
+        owner = display_handle(owner_obj)
 
         scopes = collect_scopes(a)
         app_roles = a.get("appRoleAssignments") or []
@@ -138,6 +150,7 @@ def transform(bundle, tenant_id: str | None = None,
             name=a.get("displayName") or a.get("id"),
             type="ai_agent",
             owner=owner,
+            owner_active=owner_liveness(owner_obj),
             # Entra carries no environment signal; assume production rather than under-report.
             environment="prod",
             privilege=infer_privilege(scopes),
