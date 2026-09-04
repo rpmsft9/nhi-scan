@@ -15,7 +15,7 @@ from typing import Iterable
 
 # The schema fields nhi-scan understands. Anything else is dropped so output stays clean.
 KNOWN_FIELDS = {
-    "id", "name", "type", "owner", "environment", "privilege", "credential", "secret_storage",
+    "id", "name", "type", "owner", "owner_active", "environment", "privilege", "credential", "secret_storage",
     "last_rotated_days", "last_used_days", "exposure", "scopes", "autonomous", "third_party",
     "human_used", "shared_across_env", "used_by", "tools",
 }

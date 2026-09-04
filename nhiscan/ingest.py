@@ -37,6 +37,7 @@ def _record_to_nhi(rec: dict) -> NHI:
         name=str(rec.get("name") or rec.get("id") or "unknown"),
         type=NHIType.parse(rec.get("type")),
         owner=(rec.get("owner") or None),
+        owner_active=(rec["owner_active"] if isinstance(rec.get("owner_active"), bool) else None),
         environment=Environment.parse(rec.get("environment")),
         privilege=Privilege.parse(rec.get("privilege")),
         credential=CredentialType.parse(rec.get("credential")),

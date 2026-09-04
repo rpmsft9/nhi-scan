@@ -70,6 +70,12 @@ def check_offboarding(n: NHI) -> Optional[Finding]:
             "Deprovision or disable; if still required, re-justify ownership and set an expiry.",
         )
     if n.is_orphaned:
+        if n.orphan_reason == "owner deprovisioned":
+            return _f(
+                n, "NHI1:2025", Severity.HIGH,
+                f"Recorded owner ({n.owner}) is no longer an active account — effectively orphaned.",
+                "Reassign to a current, accountable owner or offboard the identity.",
+            )
         return _f(
             n, "NHI1:2025", Severity.MEDIUM,
             "No accountable owner recorded.",

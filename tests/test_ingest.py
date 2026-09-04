@@ -40,3 +40,16 @@ def test_federated_credential_is_not_static(tmp_path):
     n = load_fleet(p).identities[0]
     assert n.credential is CredentialType.FEDERATED
     assert not n.has_static_secret
+
+
+def test_owner_active_tristate_parsed(tmp_path):
+    p = tmp_path / "inv.json"
+    p.write_text(json.dumps([
+        {"id": "a", "name": "a", "owner": "j@x", "owner_active": False},
+        {"id": "b", "name": "b", "owner": "k@x", "owner_active": True},
+        {"id": "c", "name": "c", "owner": "l@x"},  # absent -> None (backward compatible)
+    ]), encoding="utf-8")
+    a, b, c = load_fleet(p).identities
+    assert a.owner_active is False and a.is_orphaned and a.orphan_reason == "owner deprovisioned"
+    assert b.owner_active is True and not b.is_orphaned
+    assert c.owner_active is None and not c.is_orphaned

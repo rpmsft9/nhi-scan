@@ -60,7 +60,7 @@ def main(argv: list[str]) -> int:
                 continue
             sys.stderr.write(f"\r# expanding {i}/{len(todo)}")
             url = f"{base}/servicePrincipals/{sid}"
-            sp["owners"] = paged(f"{url}/owners")
+            sp["owners"] = paged(f"{url}/owners?$select=id,displayName,userPrincipalName,mail,accountEnabled")
             sp["oauth2PermissionGrants"] = paged(f"{url}/oauth2PermissionGrants")
 
             assignments = paged(f"{url}/appRoleAssignments")

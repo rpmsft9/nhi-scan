@@ -29,8 +29,12 @@ Infers credential type (certificate / secret / federated — and **managed** for
 `ManagedIdentity` principals, whose keyCredentials are Azure platform-issued, auto-rotated
 certs, not stored secrets: classifying those as certificates produces false NHI7/NHI4
 findings), rotation age from the newest credential, and third-party status from the app's
-owning tenant. The `gather_entra` path also collects each principal's **owners**, so the
-transform can tell owned from orphaned instead of flagging every SP under NHI1. With the `gather_entra` path,
+owning tenant. The `gather_entra` path also collects each principal's **owners** (with
+`accountEnabled`), so the transform can tell owned from orphaned instead of flagging every SP
+under NHI1 — and sets `owner_active` so a principal whose recorded owner is a **deprovisioned**
+account is treated as effectively orphaned (owner *validity*, not just presence). `owner_active`
+is tri-state: `true` (enabled), `false` (disabled/deleted → NHI1 High), omitted (unknown, e.g. a
+group owner or a fast scan without owner expansion → backward-compatible, not orphaned). With the `gather_entra` path,
 each principal's **app-role assignments and delegated grants** populate `scopes` and drive
 `privilege`, so overprivilege (NHI5) and wildcard detection can fire. Without grant data,
 `privilege`/`scopes` are omitted rather than guessed — and overprivilege findings won't fire

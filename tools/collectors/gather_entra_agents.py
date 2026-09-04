@@ -76,8 +76,8 @@ def main(argv: list[str]) -> int:
                 continue
             sys.stderr.write(f"\r# expanding {i}/{len(agents)}")
             sp = f"{base}/servicePrincipals/{aid}"
-            a["sponsors"] = paged(f"{sp}/sponsors")
-            a["owners"] = paged(f"{sp}/owners")
+            a["sponsors"] = paged(f"{sp}/sponsors?$select=id,displayName,userPrincipalName,mail,accountEnabled")
+            a["owners"] = paged(f"{sp}/owners?$select=id,displayName,userPrincipalName,mail,accountEnabled")
             a["oauth2PermissionGrants"] = paged(f"{sp}/oauth2PermissionGrants")
 
             assignments = paged(f"{sp}/appRoleAssignments")
