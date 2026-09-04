@@ -32,8 +32,11 @@ from __future__ import annotations
 import sys
 from datetime import datetime
 
-from .common import days_since, emit, newest, read_input, record
-from .entra_agents import collect_scopes, display_handle, infer_privilege, owner_liveness
+from .common import days_since, emit, newest, newest_timestamp, read_input, record
+from .entra_agents import (
+    collect_scopes, directory_roles, display_handle, infer_privilege,
+    infer_role_privilege, max_privilege, owner_liveness, pick_owner,
+)
 
 
 def transform(data, tenant_id: str | None = None,
@@ -77,9 +80,17 @@ def transform(data, tenant_id: str | None = None,
         has_grant_data = ("appRoleAssignments" in sp) or ("oauth2PermissionGrants" in sp)
         scopes = collect_scopes(sp) if has_grant_data else []
 
-        owners = sp.get("owners") or []
-        owner_obj = owners[0] if owners else None
+        owner_obj = pick_owner(sp.get("owners"))
         owner = display_handle(owner_obj) if owner_obj else None
+
+        # Privilege from app scopes OR directory-role membership — a role-holder can look
+        # "scoped" from scopes alone. Staleness comes from the attached sign-in report.
+        dir_roles = directory_roles(sp)
+        privilege = max_privilege(
+            infer_privilege(scopes) if has_grant_data else None,
+            infer_role_privilege(dir_roles),
+        )
+        last_used = days_since(newest_timestamp(sp.get("signInActivity") or {}), now=now)
 
         out.append(record(
             id=sp.get("id") or sp.get("appId"),
@@ -91,8 +102,9 @@ def transform(data, tenant_id: str | None = None,
             credential=credential,
             secret_storage=("none" if credential in ("federated", "managed") else "vault"),
             last_rotated_days=last_rotated,
+            last_used_days=last_used,
             third_party=(True if third_party else None),
-            privilege=(infer_privilege(scopes) if has_grant_data else None),
+            privilege=privilege,
             scopes=(scopes or None),
         ))
     return out

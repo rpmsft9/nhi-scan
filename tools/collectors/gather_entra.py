@@ -34,7 +34,7 @@ import sys
 
 from .gather_entra_agents import GRAPH, az_batch, chunked, paged, tenant_id
 
-_RELATIONSHIPS = ("owners", "oauth2PermissionGrants", "appRoleAssignments")
+_RELATIONSHIPS = ("owners", "oauth2PermissionGrants", "appRoleAssignments", "memberOf")
 
 
 def _expand_grants(todo: list[dict]) -> None:
@@ -55,6 +55,9 @@ def _expand_grants(todo: list[dict]) -> None:
                 # accountEnabled lets the transform judge owner *validity* (a deprovisioned
                 # owner = effectively orphaned), not just presence.
                 rel_url += "?$select=id,displayName,userPrincipalName,mail,accountEnabled"
+            elif rel == "memberOf":
+                # directory-role membership drives privilege the app-scope path can't see.
+                rel_url += "?$select=id,displayName"
             reqs.append({"id": rid, "method": "GET", "url": rel_url})
             meta[rid] = (sid, rel)
 
@@ -96,6 +99,28 @@ def _expand_grants(todo: list[dict]) -> None:
             asg["appRoleValue"] = role_names.get(f"{res}:{rid}") or None
 
 
+def _attach_signin_activity(sps: list[dict]) -> None:
+    """Best-effort: attach each SP's last sign-in (for staleness / NHI1 offboarding).
+
+    Graph's beta ``servicePrincipalSignInActivities`` report is keyed by appId. Needs
+    AuditLog.Read.All; on any failure (missing permission, endpoint change) we warn and continue
+    so staleness is simply unknown rather than aborting the whole gather.
+    """
+    try:
+        acts = paged(f"{GRAPH}/beta/reports/servicePrincipalSignInActivities")
+    except Exception as e:  # noqa: BLE001 - a report permission gap must not fail the gather
+        sys.stderr.write(f"# sign-in activity unavailable ({e}); staleness skipped\n")
+        return
+    by_app = {a.get("appId"): a for a in acts if isinstance(a, dict) and a.get("appId")}
+    hits = 0
+    for sp in sps:
+        act = by_app.get(sp.get("appId"))
+        if act:
+            sp["signInActivity"] = act
+            hits += 1
+    sys.stderr.write(f"# sign-in activity attached for {hits}/{len(sps)} principals\n")
+
+
 def main(argv: list[str]) -> int:
     expand = "--no-expand" not in argv
     name_filter = None
@@ -117,6 +142,7 @@ def main(argv: list[str]) -> int:
                 if not name_filter or name_filter in (sp.get("displayName") or "").lower()]
         sys.stderr.write(f"# expanding grants for {len(todo)} of {len(sps)} via Graph $batch\n")
         _expand_grants(todo)
+        _attach_signin_activity(sps)
 
     json.dump({"tenantId": tenant_id(), "servicePrincipals": sps}, sys.stdout, indent=2)
     sys.stdout.write("\n")

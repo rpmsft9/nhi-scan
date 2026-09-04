@@ -54,6 +54,30 @@ def newest(values: Iterable) -> str | None:
     return max(vals) if vals else None
 
 
+def newest_timestamp(obj) -> str | None:
+    """Newest value of any ``*DateTime`` field found anywhere in a nested dict/list.
+
+    Graph's ``servicePrincipalSignInActivities`` nests the last sign-in under several keys
+    (delegated vs application client, etc.) whose shape varies; walking for the newest
+    ``*DateTime`` value is robust to that without hard-coding the schema.
+    """
+    stamps: list[str] = []
+
+    def walk(o):
+        if isinstance(o, dict):
+            for k, v in o.items():
+                if isinstance(v, str) and "datetime" in k.lower():
+                    stamps.append(v)
+                else:
+                    walk(v)
+        elif isinstance(o, list):
+            for x in o:
+                walk(x)
+
+    walk(obj)
+    return newest(stamps)
+
+
 def record(**kw) -> dict:
     """Build an nhi-scan record, keeping only known fields and dropping None/empty values."""
     out = {}
