@@ -18,19 +18,24 @@ Options:
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
+import tempfile
+import time
+
+from .common import run_cli
 
 GRAPH = "https://graph.microsoft.com"
+
+# Microsoft Graph caps a JSON batch at 20 sub-requests.
+BATCH_MAX = 20
 
 
 def az_rest(url: str) -> dict:
     """GET a Graph URL through the Azure CLI session. Returns {} on a handled failure."""
     try:
-        raw = subprocess.check_output(
-            ["az", "rest", "--method", "GET", "--url", url, "-o", "json"],
-            stderr=subprocess.PIPE, text=True,
-        )
+        raw = run_cli(["az", "rest", "--method", "GET", "--url", url, "-o", "json"])
     except FileNotFoundError:
         sys.exit("az CLI not found. Install the Azure CLI, then run: az login --tenant <TENANT>")
     except subprocess.CalledProcessError as e:
@@ -50,10 +55,58 @@ def paged(url: str) -> list[dict]:
     return items
 
 
+def chunked(items: list, size: int = BATCH_MAX):
+    """Yield successive ``size``-length chunks of ``items``."""
+    for i in range(0, len(items), size):
+        yield items[i:i + size]
+
+
+def az_batch(requests: list[dict], version: str = "v1.0") -> dict[str, dict]:
+    """POST one Graph ``$batch`` (<= ``BATCH_MAX`` sub-requests) and return ``{id: response}``.
+
+    Each request is ``{"id", "method", "url"}`` with a tenant-relative ``url``. Sub-requests
+    throttled with 429/503 are retried; a whole-batch transient failure is retried too. Any id
+    still unanswered after the retry budget is simply absent from the result (caller degrades to
+    empty rather than crashing). Batching turns the per-principal expansion from thousands of
+    sequential ``az rest`` process spawns into a handful of POSTs.
+    """
+    url = f"{GRAPH}/{version}/$batch"
+    pending = list(requests)
+    out: dict[str, dict] = {}
+    for _ in range(6):
+        if not pending:
+            break
+        fd, path = tempfile.mkstemp(suffix=".json")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump({"requests": pending}, f)
+            try:
+                raw = run_cli(["az", "rest", "--method", "POST", "--url", url,
+                               "--headers", "Content-Type=application/json",
+                               "--body", f"@{path}", "-o", "json"])
+            except subprocess.CalledProcessError:
+                time.sleep(2)  # transient: retry the whole batch
+                continue
+        finally:
+            os.unlink(path)
+
+        resp = json.loads(raw) if raw.strip() else {}
+        retry: list[dict] = []
+        by_id = {q["id"]: q for q in pending}
+        for r in resp.get("responses") or []:
+            if r.get("status") in (429, 503) and r.get("id") in by_id:
+                retry.append(by_id[r["id"]])
+            else:
+                out[r["id"]] = r
+        pending = retry
+        if pending:
+            time.sleep(2)
+    return out
+
+
 def tenant_id() -> str | None:
     try:
-        acct = json.loads(subprocess.check_output(
-            ["az", "account", "show", "-o", "json"], text=True, stderr=subprocess.DEVNULL))
+        acct = json.loads(run_cli(["az", "account", "show", "-o", "json"]))
         return acct.get("tenantId")
     except Exception:
         return None

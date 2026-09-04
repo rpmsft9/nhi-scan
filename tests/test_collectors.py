@@ -2,10 +2,15 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+import sys
+
+import pytest
+
+from nhiscan import report
 from nhiscan.ingest import load_fleet
 from nhiscan.scan import scan
-from tools.collectors import aws, csv_import, entra, entra_agents, gcp, mcp
-from tools.collectors.common import KNOWN_FIELDS, days_since
+from tools.collectors import aws, csv_import, entra, entra_agents, gather_okta, gcp, mcp, okta
+from tools.collectors.common import KNOWN_FIELDS, _assert_shell_safe, days_since, read_input, run_cli
 
 SAMPLES = Path(__file__).resolve().parents[1] / "tools" / "samples"
 NOW = datetime(2026, 8, 9, tzinfo=timezone.utc)
@@ -26,6 +31,105 @@ def test_days_since_handles_formats():
     assert days_since("2026-07-10", now=NOW) == 30
     assert days_since(None, now=NOW) is None
     assert days_since("not-a-date", now=NOW) is None
+
+
+def test_read_input_tolerates_utf8_bom(tmp_path):
+    # Windows PowerShell (`>`, Out-File) prepends a UTF-8 BOM; plain json.load rejects it.
+    p = tmp_path / "bundle.json"
+    p.write_bytes(b'\xef\xbb\xbf[{"id": "x", "name": "y"}]')
+    assert read_input(["prog", str(p)]) == [{"id": "x", "name": "y"}]
+
+
+def test_load_fleet_tolerates_utf8_bom(tmp_path):
+    p = tmp_path / "inventory.json"
+    p.write_bytes(b'\xef\xbb\xbf[{"id": "a", "name": "a"}]')
+    assert len(load_fleet(p)) == 1
+
+
+def test_run_cli_executes_cross_platform():
+    # Exercises the platform-specific launch path (cmd.exe on Windows, direct on POSIX).
+    assert "nhi-ok" in run_cli([sys.executable, "-c", "print('nhi-ok')"])
+
+
+def test_assert_shell_safe_rejects_breakout_chars():
+    # A real percent-encoded Graph URL (with & and %) is fine...
+    _assert_shell_safe(["az", "rest", "--url",
+                        "https://graph.microsoft.com/v1.0/x?$select=a%2cb&$top=2"])
+    # ...but a quote or newline that could break out of the cmd.exe quoting is refused.
+    for bad in ['a"b', "a\nb", "a\x00b"]:
+        with pytest.raises(ValueError):
+            _assert_shell_safe(["az", bad])
+
+
+# --- security hardening: Okta gatherer ------------------------------------------------
+def test_okta_build_request_keeps_token_off_redirects():
+    req = gather_okta.build_request("https://x.okta.com/api/v1/apps", "SECRET-TOKEN")
+    # Authorization is an *unredirected* header, so urllib won't resend it on a cross-host 3xx.
+    assert "Authorization" in req.unredirected_hdrs
+    assert "Authorization" not in req.headers
+
+
+def test_okta_requires_https(monkeypatch):
+    monkeypatch.setenv("OKTA_ORG_URL", "http://insecure.okta.com")
+    monkeypatch.setenv("OKTA_API_TOKEN", "t")
+    with pytest.raises(SystemExit):
+        gather_okta.main(["gather_okta"])   # exits before any network call
+
+
+# --- security hardening: Markdown report escaping -------------------------------------
+def test_markdown_report_escapes_identity_controlled_text(tmp_path):
+    inv = [{"id": "x", "name": "evil <script> `x` [z](javascript:1) | pipe",
+            "type": "api_key", "credential": "static_secret", "last_rotated_days": 999}]
+    p = tmp_path / "inv.json"
+    p.write_text(json.dumps(inv), encoding="utf-8")
+    md = report.to_markdown(scan(load_fleet(p)))
+    assert "<script>" not in md and "&lt;script&gt;" in md   # raw HTML neutralized
+    assert "`x`" not in md                                    # backticks escaped
+    assert "](javascript:" not in md                          # link syntax escaped
+
+
+def test_chunked_splits_into_batches():
+    from tools.collectors.gather_entra_agents import chunked
+    assert list(chunked([1, 2, 3, 4, 5], 2)) == [[1, 2], [3, 4], [5]]
+
+
+def _batch_body_requests(args):
+    # az_batch passes the batch payload as `--body @<tempfile>`; read it back.
+    path = args[args.index("--body") + 1][1:]
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)["requests"]
+
+
+def test_az_batch_maps_responses_by_id(monkeypatch):
+    from tools.collectors import gather_entra_agents as g
+
+    def fake_run_cli(args):
+        reqs = _batch_body_requests(args)
+        return json.dumps({"responses": [
+            {"id": r["id"], "status": 200, "body": {"value": [{"from": r["url"]}]}}
+            for r in reqs]})
+
+    monkeypatch.setattr(g, "run_cli", fake_run_cli)
+    out = g.az_batch([{"id": "1", "method": "GET", "url": "/a"},
+                      {"id": "2", "method": "GET", "url": "/b"}])
+    assert out["1"]["body"]["value"] == [{"from": "/a"}]
+    assert set(out) == {"1", "2"}
+
+
+def test_az_batch_retries_throttled_subrequests(monkeypatch):
+    from tools.collectors import gather_entra_agents as g
+    seen = {"first": True}
+
+    def fake_run_cli(args):
+        reqs = _batch_body_requests(args)
+        status = 429 if seen["first"] else 200
+        seen["first"] = False
+        return json.dumps({"responses": [{"id": r["id"], "status": status} for r in reqs]})
+
+    monkeypatch.setattr(g, "run_cli", fake_run_cli)
+    monkeypatch.setattr(g.time, "sleep", lambda *_: None)
+    out = g.az_batch([{"id": "1", "method": "GET", "url": "/a"}])
+    assert out["1"]["status"] == 200  # recovered on retry
 
 
 # --- Entra ----------------------------------------------------------------------------
@@ -58,6 +162,18 @@ def test_entra_transform():
     assert mi["owner"] == "platform@bank.example"
     # SPs gathered without owner data stay ownerless (orphaned) rather than guessing
     assert "owner" not in by_name["payments-connector"]
+
+
+def test_entra_runs_as_module(tmp_path):
+    # Exercises the real `python -m tools.collectors.entra` entrypoint (the __main__ block and
+    # its sys.argv use), which importing transform() directly would not catch.
+    import subprocess
+    out = subprocess.check_output(
+        [sys.executable, "-m", "tools.collectors.entra", str(SAMPLES / "entra-sp.json"),
+         "--tenant", "TENANT-AAA"],
+        cwd=str(Path(__file__).resolve().parents[1]), text=True)
+    recs = json.loads(out)
+    assert isinstance(recs, list) and len(recs) == 4
 
 
 def test_entra_skips_agent_identities():
@@ -158,6 +274,54 @@ def test_csv_transform():
     assert legacy["secret_storage"] == "plaintext"
     assert "last_rotated_days" not in legacy  # blank int -> omitted
 
+
+
+# --- Okta -----------------------------------------------------------------------------
+def test_okta_transform():
+    recs = okta.transform(_load("okta-apps.json"), now=NOW)
+    assert len(recs) == 3
+    assert _only_known(recs)
+    by_name = {r["name"]: r for r in recs}
+
+    # OAuth service app with a client secret; the okta.apps.manage grant makes it privileged
+    pay = by_name["payments-service"]
+    assert pay["type"] == "oauth_app"
+    assert pay["credential"] == "static_secret"
+    assert pay["privilege"] == "privileged"
+    assert "okta.apps.manage" in pay["scopes"]
+
+    # private_key_jwt => certificate (no shared secret); read-only-ish grant stays scoped
+    rep = by_name["reporting-jwt"]
+    assert rep["credential"] == "certificate"
+    assert rep["privilege"] == "scoped"
+
+    # API token => api_key (NHI4), rotation age from creation (long-lived => NHI7), owner = creator
+    tok = by_name["ci-deploy-token"]
+    assert tok["type"] == "api_key"
+    assert tok["credential"] == "api_key"
+    assert tok["owner"] == "00uadmin1"
+    assert tok["last_rotated_days"] > 900
+
+
+def test_okta_without_grants_omits_privilege():
+    apps = [{"id": "0oa9", "label": "no-grants-app",
+             "settings": {"oauthClient": {"token_endpoint_auth_method": "client_secret_basic"}}}]
+    rec = okta.transform({"apps": apps}, now=NOW)[0]
+    assert "privilege" not in rec and "scopes" not in rec  # not gathered -> not guessed
+
+
+def test_okta_next_link_parses_cursor():
+    hdr = ('<https://x.okta.com/api/v1/apps?limit=200>; rel="self", '
+           '<https://x.okta.com/api/v1/apps?after=abc123&limit=200>; rel="next"')
+    assert gather_okta.next_link(hdr) == "https://x.okta.com/api/v1/apps?after=abc123&limit=200"
+    assert gather_okta.next_link('<https://x.okta.com/api/v1/apps>; rel="self"') is None
+
+
+def test_okta_output_scans(tmp_path):
+    recs = okta.transform(_load("okta-apps.json"), now=NOW)
+    p = tmp_path / "okta.json"
+    p.write_text(json.dumps(recs), encoding="utf-8")
+    assert scan(load_fleet(p)).total == 3
 
 
 # --- Entra Agent ID -------------------------------------------------------------------

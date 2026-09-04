@@ -70,7 +70,9 @@ def _parse_text(text: str, suffix: str) -> Any:
 
 def load_fleet(path: str | Path) -> Fleet:
     p = Path(path)
-    data = _parse_text(p.read_text(encoding="utf-8"), p.suffix.lower())
+    # utf-8-sig tolerates a leading BOM (Windows PowerShell writes one via `>` / Out-File),
+    # which plain utf-8 decoding would carry into the parser and reject.
+    data = _parse_text(p.read_text(encoding="utf-8-sig"), p.suffix.lower())
     records = data.get("identities", data) if isinstance(data, dict) else data
     if not isinstance(records, list):
         raise ValueError("Inventory must be a list of NHI records or an object with 'identities'.")

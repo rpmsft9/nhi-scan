@@ -35,6 +35,27 @@ prioritization layer.
 - **Agent-aware.** Autonomous AI agents with elevated privilege tier as crown jewels — the emerging
   gap that classic secret scanners don't model.
 
+## Prerequisites
+
+`nhi-scan` is pure Python and runs on **Linux, macOS, and Windows**.
+
+- **Python ≥ 3.10** (`python --version`). The core install has **zero third-party dependencies**.
+- **pip** (and, to run from source, `git`).
+- Collectors are invoked as modules from the **repository root** (`python -m tools.collectors.*`).
+
+To generate an inventory from a **live cloud**, install and sign in to the matching **read-only**
+CLI. Hand-written, CSV, and MCP inventories need none of these.
+
+| Source | CLI needed | macOS (Homebrew) | Windows (winget) |
+| --- | --- | --- | --- |
+| Entra ID / Entra Agent ID | Azure CLI (`az`) | `brew install azure-cli` | `winget install Microsoft.AzureCLI` |
+| AWS IAM | AWS CLI v2 (`aws`) | `brew install awscli` | `winget install Amazon.AWSCLI` |
+| GCP | Google Cloud SDK (`gcloud`) | `brew install --cask google-cloud-sdk` | `winget install Google.CloudSDK` |
+| Merge step (optional) | `jq` | `brew install jq` | `winget install jqlang.jq` |
+
+On Windows the cloud CLIs install as `.cmd` shims and their exports carry a UTF-8 BOM; both are
+handled — the collectors locate the CLI on `PATH` on every OS and read JSON BOM-tolerantly.
+
 ## Install
 
 ```bash
@@ -42,6 +63,27 @@ pip install -e .            # core, zero third-party dependencies (JSON inventor
 pip install -e '.[yaml]'    # + YAML inventory support
 pip install -e '.[dev]'     # + pytest
 ```
+
+## Required roles & permissions
+
+**Every collector is read-only** — it reads identities and their posture, never writes and never
+touches a secret (auth stays with the CLI you signed in with). Grant the least-privilege role
+below for the source you're inventorying:
+
+| Platform | Native collector | Least-privilege read role / permission |
+| --- | --- | --- |
+| **Entra ID** (service principals) | `gather_entra` → `entra` | Microsoft Graph application permission **`Application.Read.All`** (or `Directory.Read.All`). Directory role **Global Reader** is sufficient. |
+| **Entra Agent ID** (AI agents) | `gather_entra_agents` → `entra_agents` | **`AgentIdentity.Read.All`** + **`Application.Read.All`** (`Directory.Read.All` covers both). Directory role **Global Reader**. |
+| **AWS IAM** | `gather_aws` → `aws` | The AWS-managed **`IAMReadOnlyAccess`** policy. |
+| **GCP** (service accounts) | `gather_gcp` → `gcp` | **`roles/iam.securityReviewer`** (project **Viewer** also works). |
+| **Okta** (service apps + API tokens) | `gather_okta` → `okta` | A **Read-Only Administrator** SSWS token, or an OAuth token scoped **`okta.apps.read`** + **`okta.apiTokens.read`**. Provided via `OKTA_ORG_URL` / `OKTA_API_TOKEN` env vars (no CLI needed). |
+| **Ping and other IdPs** | *export → `csv_import`* | No native collector yet — export your apps / service accounts / tokens to CSV using a **read-only administrator or reporting role** (e.g. PingOne a read-only **Identity Data Admin**), then feed the CSV to `csv_import`. The role is only used for your export, not by nhi-scan. |
+
+No role grants write access; nothing above can modify the directory or the identities it reads.
+
+> **Which platforms are native?** Entra ID, Entra Agent ID, AWS IAM, GCP, and Okta have
+> first-class collectors. Everything else (Ping, GitHub, secrets managers, …) is inventoried by
+> exporting a read-only report to CSV — see [Preparing your inventory](#preparing-your-inventory).
 
 ## Usage
 
@@ -148,13 +190,14 @@ failing, so a partial inventory still produces a useful report.
 
 For anything past a pilot, don't hand-write the file — **generate it** from your environment with
 the [collectors](tools/collectors/README.md). Each is a read-only transform (source API JSON in →
-nhi-scan JSON out) for **Entra ID, Entra Agent ID, AWS IAM, GCP service accounts, and CSV exports** — each paired with a read-only `gather_*` script that collects the identity's **granted permissions** (app roles and delegated scopes; attached, inline, and group-inherited IAM policies; project role bindings), so privilege is measured, not guessed:
+nhi-scan JSON out) for **Entra ID, Entra Agent ID, AWS IAM, GCP service accounts, Okta, and CSV exports** — each paired with a read-only `gather_*` script that collects the identity's **granted permissions** (app roles and delegated scopes; attached, inline, and group-inherited IAM policies; project role bindings; Okta OAuth grants), so privilege is measured, not guessed:
 
 ```bash
 python -m tools.collectors.gather_entra        | python -m tools.collectors.entra        > entra-nhi.json
 python -m tools.collectors.gather_entra_agents | python -m tools.collectors.entra_agents > agents-nhi.json
 python -m tools.collectors.gather_aws          | python -m tools.collectors.aws          > aws-nhi.json
 python -m tools.collectors.gather_gcp          | python -m tools.collectors.gcp          > gcp-nhi.json
+python -m tools.collectors.gather_okta         | python -m tools.collectors.okta         > okta-nhi.json
 python -m tools.collectors.csv_import identities.csv > csv-nhi.json
 # merge every source, then scan
 jq -s 'add' *-nhi.json > inventory.json && nhi-scan scan inventory.json

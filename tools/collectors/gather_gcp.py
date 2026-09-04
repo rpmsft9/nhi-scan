@@ -22,11 +22,12 @@ import json
 import subprocess
 import sys
 
+from .common import run_cli
+
 
 def gcloud(*args) -> list | dict:
     try:
-        raw = subprocess.check_output(["gcloud", *args, "--format=json"],
-                                      stderr=subprocess.PIPE, text=True)
+        raw = run_cli(["gcloud", *args, "--format=json"])
     except FileNotFoundError:
         sys.exit("gcloud CLI not found. Install it and authenticate first.")
     except subprocess.CalledProcessError as e:
@@ -41,9 +42,7 @@ def main(argv: list[str]) -> int:
     projects = [argv[i + 1] for i, a in enumerate(argv) if a == "--project" and i + 1 < len(argv)]
     if not projects:
         try:
-            current = subprocess.check_output(
-                ["gcloud", "config", "get-value", "project"],
-                text=True, stderr=subprocess.DEVNULL).strip()
+            current = run_cli(["gcloud", "config", "get-value", "project"]).strip()
         except Exception:
             current = ""
         if not current or current == "(unset)":

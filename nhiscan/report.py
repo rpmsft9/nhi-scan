@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from . import owasp
 from .diff import DriftReport, IdentityDelta
 from .models import RiskTier
@@ -9,6 +11,21 @@ from .scan import ScanResult
 
 _TIER_BADGE = {1: "🔴 Critical", 2: "🟠 High", 3: "🟡 Moderate", 4: "🟢 Baseline"}
 _ARROW = {"escalated": "🔺", "reduced": "🔻", "same": "＝", "n/a": ""}
+
+# Markdown control characters to neutralize in identity-controlled fields — the identity name,
+# owner, and id, which are emitted in high-impact positions (a `###` heading, bold text). These
+# values come from the inventory, ultimately from a directory where an attacker may control, e.g.,
+# an app's display name, so emitting them raw would let a crafted name inject markup or a link when
+# the report is later rendered as HTML. (Finding evidence is tool-composed prose and scope names
+# are platform-constrained, so those are left as-is to avoid mangling. The JSON output is unaffected.)
+_MD_SPECIAL = re.compile(r"([\\`*_\[\]()#!|~])")
+
+
+def _md(text) -> str:
+    """Escape a value for safe inclusion in the Markdown report."""
+    s = str(text).replace("\r", " ").replace("\n", " ")
+    s = s.replace("<", "&lt;").replace(">", "&gt;")   # neutralize raw HTML
+    return _MD_SPECIAL.sub(r"\\\1", s)
 
 
 def to_json(result: ScanResult) -> dict:
@@ -70,10 +87,12 @@ def to_markdown(result: ScanResult) -> str:
     for a in result.by_risk:
         n = a.nhi
         if n.owner and n.owner_active is False:
-            owner = f"{n.owner} _(deprovisioned)_"
+            owner = f"{_md(n.owner)} _(deprovisioned)_"
+        elif n.owner:
+            owner = _md(n.owner)
         else:
-            owner = n.owner or "_orphaned_"
-        out.append(f"### {_TIER_BADGE[int(a.tier.tier)]} — {n.name} `({n.type.value})`")
+            owner = "_orphaned_"
+        out.append(f"### {_TIER_BADGE[int(a.tier.tier)]} — {_md(n.name)} `({n.type.value})`")
         out.append(
             f"- **Owner:** {owner} · **Env:** {n.environment.value} · "
             f"**Privilege:** {n.privilege.value} · **Score:** {a.risk_score}"
@@ -132,7 +151,7 @@ def drift_to_markdown(report: DriftReport) -> str:
         out.append("_These identities gained tools or scopes while privilege, credential age, "
                    "and owner stayed the same — the blind spot a point-in-time tier misses._\n")
         for d in reach_only:
-            out.append(f"### {d.name} `({d.id})`")
+            out.append(f"### {_md(d.name)} `({_md(d.id)})`")
             out.extend(_delta_lines(d))
             out.append("")
 
@@ -141,19 +160,19 @@ def drift_to_markdown(report: DriftReport) -> str:
         for d in report.escalations:
             if d in reach_only:
                 continue
-            out.append(f"### {d.name} `({d.id})`")
+            out.append(f"### {_md(d.name)} `({_md(d.id)})`")
             out.extend(_delta_lines(d))
             out.append("")
 
     if report.added:
         out.append("## Added identities\n")
         for d in report.added:
-            out.append(f"- **{d.name}** `({d.id})` — {_TIER_BADGE[d.tier_after]}")
+            out.append(f"- **{_md(d.name)}** `({_md(d.id)})` — {_TIER_BADGE[d.tier_after]}")
         out.append("")
     if report.removed:
         out.append("## Removed identities\n")
         for d in report.removed:
-            out.append(f"- {d.name} `({d.id})` — was {_TIER_BADGE[d.tier_before]}")
+            out.append(f"- {_md(d.name)} `({_md(d.id)})` — was {_TIER_BADGE[d.tier_before]}")
         out.append("")
 
     return "\n".join(out)

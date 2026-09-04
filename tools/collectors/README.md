@@ -10,6 +10,19 @@ every collector against the recorded samples in [`../samples`](../samples).
 
 The flow is always: **collect (per source) → merge → scan.**
 
+**Prerequisites & roles** — for the CLI each source needs (with macOS/Windows install commands)
+and the least-privilege read-only role per platform (Entra, Entra Agent ID, AWS, GCP, and
+Okta/Ping via CSV), see [Prerequisites](../../README.md#prerequisites) and
+[Required roles & permissions](../../README.md#required-roles--permissions) in the top-level README.
+Each section below also states its own read-only permission.
+
+> **Running the collectors.** Invoke them as modules from the **repository root** (the folder
+> containing `tools/`), e.g. `python -m tools.collectors.entra ...`. Running from inside
+> `tools/collectors/` raises `ModuleNotFoundError: No module named 'tools'`. The collectors are
+> **cross-platform** (Linux, macOS, Windows) — the `gather_*` scripts locate `az`/`aws`/`gcloud`
+> on `PATH` on every OS, and every collector reads JSON tolerant of a UTF-8 BOM, so bundles
+> produced by Windows PowerShell (`>` / `Out-File`) feed straight back in.
+
 ## Entra ID (Azure AD)
 
 Read-only permission: `Application.Read.All` (or `Directory.Read.All`); Global Reader is a
@@ -38,9 +51,12 @@ group owner or a fast scan without owner expansion → backward-compatible, not 
 each principal's **app-role assignments and delegated grants** populate `scopes` and drive
 `privilege`, so overprivilege (NHI5) and wildcard detection can fire. Without grant data,
 `privilege`/`scopes` are omitted rather than guessed — and overprivilege findings won't fire
-for those records. Expansion costs two extra GETs per principal (`--no-expand` or
-`--filter <substring>` to limit it). Agent identities (`ServiceIdentity`) are excluded — use
-the Entra Agent ID collector below, and merging the two stays double-count-free.
+for those records. Expansion reads three relationships per principal (owners, delegated grants,
+app-role assignments) plus one lookup per referenced resource, all issued through Microsoft
+Graph `$batch` (20 sub-requests per call) — so hundreds of principals finish in a couple of
+minutes rather than one `az rest` per read; `--no-expand` or `--filter <substring>` limit it.
+Agent identities (`ServiceIdentity`) are excluded — use the Entra Agent ID collector below, and
+merging the two stays double-count-free.
 
 ## Entra Agent ID (AI agent identities)
 
@@ -81,6 +97,32 @@ agent under it.
 **Reach (`tools`) is not in Entra.** An agent's tool/connector manifest lives in Agent 365,
 Copilot Studio, or its MCP config. Collect it with the [agent tool-manifest collector](#agent-tool-manifests-agent-reach)
 and merge on `id` to make `nhi-scan diff` able to catch reach growth.
+
+## Okta
+
+Read-only permission: a **Read-Only Administrator** SSWS token, or an OAuth token with
+`okta.apps.read` + `okta.apiTokens.read`. Okta has no CLI session to borrow, so auth comes from
+your environment and is used only to sign the read-only GETs (never stored):
+
+```bash
+export OKTA_ORG_URL=https://your-org.okta.com
+export OKTA_API_TOKEN=<SSWS token>        # PowerShell: $env:OKTA_API_TOKEN="..."
+python -m tools.collectors.gather_okta > okta-bundle.json
+python -m tools.collectors.okta okta-bundle.json > okta-nhi.json
+```
+
+Inventories the two non-human identity classes Okta exposes:
+
+| Emitted | Derived from |
+| --- | --- |
+| `type: oauth_app` | OAuth **service apps** (the `client_credentials` grant — machine-to-machine). `--all-apps` includes every app; default is service apps only |
+| `credential` | `private_key_jwt` → certificate; `client_secret_*` → static secret; `none` → federated |
+| `scopes` / `privilege` | each app's **granted OAuth scopes** (`okta.*.manage` → privileged, `okta.*` → admin). Gathered per app; `--no-expand` skips it, and then privilege/scopes are omitted rather than guessed |
+| `type: api_key` | org **API tokens** (`/api/v1/api-tokens`) — long-lived static secrets, so NHI4 fires; rotation age from the token's creation date surfaces never-rotated tokens under NHI7 |
+| `owner` (API tokens) | the token's creator (`userId`) — the closest accountable human |
+
+Uses only the Python standard library (no extra HTTP dependency). Pagination follows Okta's
+`Link: rel="next"` cursor.
 
 ## AWS IAM
 
