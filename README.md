@@ -19,6 +19,11 @@ CSF 2.0, and 800-53).
 > often autonomous identity. `nhi-scan` treats the agent as what it is: an NHI that needs an
 > owner, least privilege, short-lived credentials, and a tier.
 
+> **What's new (v0.3.0):** owner *validity* (an identity whose owner has left is caught as
+> orphaned, not "governed"), **native staleness** from sign-in activity, **directory-role
+> privilege**, an **Okta** collector, a **~20× faster** enriched Entra gather via Graph `$batch`,
+> and full **Windows** support. See the **[CHANGELOG](CHANGELOG.md)** for the full history since v0.1.
+
 ## Why this exists
 
 Discovery tools tell you *how many* secrets and service accounts you have. A CISO needs the next
@@ -137,7 +142,8 @@ a safe, conservative posture, so a partial inventory still assesses.
 | `privilege` | `admin`, `privileged`, `scoped`, `read_only` | tiering, NHI5 |
 | `credential` | `static_secret`, `api_key`, `certificate`, `federated`, `managed`, `short_lived_token`, `none` | NHI4, NHI7 |
 | `secret_storage` | `vault`, `env`, `plaintext`, `none` | NHI2 |
-| `last_rotated_days` / `last_used_days` | integer or null | NHI7 / NHI1 |
+| `last_rotated_days` / `last_used_days` | integer or null | NHI7 / NHI1 (staleness) |
+| `owner` / `owner_active` | string / bool | NHI1 — presence **and** validity; `owner_active: false` (a deprovisioned owner) is treated as orphaned |
 | `exposure` | `internet`, `external_partner`, `internal` | tiering, NHI6 |
 | `scopes` | list of strings (`*` / `:*` = wildcard) | NHI5 |
 | `tools` | list of strings — an agent's tools / connectors / MCP servers | agent **reach** (drift) |
