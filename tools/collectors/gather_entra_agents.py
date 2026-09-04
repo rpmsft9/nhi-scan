@@ -131,6 +131,7 @@ def main(argv: list[str]) -> int:
             sp = f"{base}/servicePrincipals/{aid}"
             a["sponsors"] = paged(f"{sp}/sponsors?$select=id,displayName,userPrincipalName,mail,accountEnabled")
             a["owners"] = paged(f"{sp}/owners?$select=id,displayName,userPrincipalName,mail,accountEnabled")
+            a["memberOf"] = paged(f"{sp}/memberOf?$select=id,displayName")
             a["oauth2PermissionGrants"] = paged(f"{sp}/oauth2PermissionGrants")
 
             assignments = paged(f"{sp}/appRoleAssignments")

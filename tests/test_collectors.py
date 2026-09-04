@@ -415,3 +415,69 @@ def test_entra_owner_liveness():
     assert recs["sp-dead"]["owner_active"] is False
     assert "owner_active" not in recs["sp-grp"] and "owner" in recs["sp-grp"]
     assert "owner" not in recs["sp-none"] and "owner_active" not in recs["sp-none"]
+
+
+# --- collector enrichment: multi-owner, staleness, directory-role privilege ----------
+def test_entra_picks_live_human_owner_over_disabled_first():
+    sps = [{
+        "id": "sp1", "displayName": "Multi", "appId": "app1",
+        "owners": [
+            {"displayName": "old-admin", "accountEnabled": False},
+            {"userPrincipalName": "live@x", "accountEnabled": True},
+        ],
+    }]
+    rec = entra.transform(sps, tenant_id="T", now=NOW)[0]
+    assert rec["owner"] == "live@x"
+    assert rec["owner_active"] is True
+
+
+def test_entra_signin_activity_populates_last_used():
+    sps = [{
+        "id": "sp2", "displayName": "Stale", "appId": "app2",
+        "owners": [{"userPrincipalName": "o@x", "accountEnabled": True}],
+        "signInActivity": {"applicationAuthenticationClientSignInActivity":
+                           {"lastSignInDateTime": "2020-01-01T00:00:00Z"}},
+    }]
+    rec = entra.transform(sps, tenant_id="T", now=NOW)[0]
+    assert rec["last_used_days"] is not None and rec["last_used_days"] > 365
+
+
+def test_entra_admin_directory_role_drives_privilege():
+    # grant data present but empty (scope priv read_only), member of an admin directory role
+    sps = [{
+        "id": "sp3", "displayName": "RoleHolder", "appId": "app3",
+        "appRoleAssignments": [],
+        "memberOf": [{"@odata.type": "#microsoft.graph.directoryRole",
+                      "displayName": "Application Administrator"}],
+    }]
+    rec = entra.transform(sps, tenant_id="T", now=NOW)[0]
+    assert rec["privilege"] == "admin"
+
+
+def test_entra_nonadmin_directory_role_is_privileged():
+    sps = [{
+        "id": "sp4", "displayName": "RoleHolder2", "appId": "app4",
+        "memberOf": [{"@odata.type": "#microsoft.graph.directoryRole",
+                      "displayName": "Some Custom Role"}],
+    }]
+    rec = entra.transform(sps, tenant_id="T", now=NOW)[0]
+    assert rec["privilege"] == "privileged"
+
+
+def test_entra_group_membership_is_not_a_role():
+    sps = [{
+        "id": "sp5", "displayName": "GroupMember", "appId": "app5",
+        "memberOf": [{"@odata.type": "#microsoft.graph.group", "displayName": "All Staff"}],
+    }]
+    rec = entra.transform(sps, tenant_id="T", now=NOW)[0]
+    assert "privilege" not in rec  # no grant data + no directory role -> omitted
+
+
+def test_agent_directory_role_raises_privilege():
+    bundle = {"tenantId": "T", "agents": [{
+        "id": "ag1", "appId": "agapp1", "displayName": "RoleAgent",
+        "memberOf": [{"@odata.type": "#microsoft.graph.directoryRole",
+                      "displayName": "Global Administrator"}],
+    }]}
+    rec = entra_agents.transform(bundle, now=NOW)[0]
+    assert rec["privilege"] == "admin"

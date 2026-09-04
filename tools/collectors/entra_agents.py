@@ -72,6 +72,62 @@ def owner_liveness(principal: dict | None) -> bool | None:
     return val if isinstance(val, bool) else None
 
 
+def pick_owner(principals: list | None) -> dict | None:
+    """Best owner/sponsor among candidates, so a live human beats a stale first entry.
+    Prefers an *enabled* principal, and among those a real user (has a UPN); falls back to the
+    first. Fixes the 'only owners[0]' gap: 3 owners where [0] is a disabled account but [1] is a
+    live user now resolve to the live user, not a false 'deprovisioned' flag."""
+    pool = [p for p in (principals or []) if isinstance(p, dict)]
+    if not pool:
+        return None
+    tier = [p for p in pool if p.get("accountEnabled") is True] or pool
+    users = [p for p in tier if p.get("userPrincipalName")]
+    return (users or tier)[0]
+
+
+# Admin-tier Entra directory roles (lowercased displayName). Membership => admin privilege.
+_PRIVILEGED_DIRECTORY_ROLES = {
+    "global administrator", "privileged role administrator",
+    "privileged authentication administrator", "application administrator",
+    "cloud application administrator", "security administrator", "user administrator",
+    "authentication administrator", "exchange administrator", "sharepoint administrator",
+    "intune administrator", "conditional access administrator",
+    "hybrid identity administrator", "directory synchronization accounts",
+    "global reader",  # broad read across the directory
+}
+
+_PRIV_ORDER = {"read_only": 0, "scoped": 1, "privileged": 2, "admin": 3}
+
+
+def directory_roles(principal: dict) -> list[str]:
+    """Names of Entra *directory roles* the principal is a member of (groups ignored)."""
+    out = []
+    for m in principal.get("memberOf") or []:
+        if isinstance(m, dict) and str(m.get("@odata.type", "")).endswith("directoryRole"):
+            name = m.get("displayName")
+            if name:
+                out.append(name)
+    return out
+
+
+def infer_role_privilege(role_names: list[str]) -> str | None:
+    """Privilege implied by directory-role membership: any admin-tier role -> admin; any other
+    directory role -> privileged (an NHI holding a directory role is elevated by definition);
+    no roles -> None. A privileged SP/agent can look 'scoped' from app scopes alone — this
+    catches the directory-role path that scope inference misses."""
+    if not role_names:
+        return None
+    if any(r.strip().lower() in _PRIVILEGED_DIRECTORY_ROLES for r in role_names):
+        return "admin"
+    return "privileged"
+
+
+def max_privilege(*values: str | None) -> str | None:
+    """Highest privilege among the given values (None-safe); None only if all are None."""
+    present = [v for v in values if v]
+    return max(present, key=lambda v: _PRIV_ORDER.get(v, 1)) if present else None
+
+
 def collect_scopes(agent: dict) -> list[str]:
     """Application roles + delegated scopes, as a flat, de-duplicated list."""
     out: list[str] = []
@@ -134,13 +190,14 @@ def transform(bundle, tenant_id: str | None = None,
             newest([c.get("startDateTime") for c in (passwords + certs)]), now=now
         )
 
-        sponsors = a.get("sponsors") or []
-        owners = a.get("owners") or []
-        owner_obj = sponsors[0] if sponsors else (owners[0] if owners else None)
+        owner_obj = pick_owner(a.get("sponsors")) or pick_owner(a.get("owners"))
         owner = display_handle(owner_obj)
 
         scopes = collect_scopes(a)
         app_roles = a.get("appRoleAssignments") or []
+        # Scope-derived privilege, raised if the agent holds a directory role.
+        privilege = max_privilege(infer_privilege(scopes),
+                                  infer_role_privilege(directory_roles(a))) or "read_only"
 
         owner_org = a.get("appOwnerOrganizationId")
         third_party = bool(tenant_id and owner_org and owner_org != tenant_id)
@@ -153,7 +210,7 @@ def transform(bundle, tenant_id: str | None = None,
             owner_active=owner_liveness(owner_obj),
             # Entra carries no environment signal; assume production rather than under-report.
             environment="prod",
-            privilege=infer_privilege(scopes),
+            privilege=privilege,
             credential=credential,
             secret_storage=("none" if credential == "federated" else "vault"),
             last_rotated_days=last_rotated,

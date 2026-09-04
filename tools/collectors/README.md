@@ -49,10 +49,18 @@ account is treated as effectively orphaned (owner *validity*, not just presence)
 is tri-state: `true` (enabled), `false` (disabled/deleted → NHI1 High), omitted (unknown, e.g. a
 group owner or a fast scan without owner expansion → backward-compatible, not orphaned). With the `gather_entra` path,
 each principal's **app-role assignments and delegated grants** populate `scopes` and drive
-`privilege`, so overprivilege (NHI5) and wildcard detection can fire. Without grant data,
+`privilege`, so overprivilege (NHI5) and wildcard detection can fire. `privilege` is also raised
+by **directory-role membership** (`memberOf`): a principal in an admin-tier Entra role (e.g.
+Application Administrator) is `admin` and any other directory role is `privileged`, catching
+elevation the app-scope path alone would miss. The expansion also attaches each principal's
+**last sign-in** (from the beta `servicePrincipalSignInActivities` report, best-effort — needs
+`AuditLog.Read.All`; on a permission gap it's skipped, not fatal) so `last_used_days` drives
+staleness (NHI1 offboarding). And when a principal has multiple owners, a **live human owner is
+chosen over a disabled one** rather than blindly taking the first. Without grant data,
 `privilege`/`scopes` are omitted rather than guessed — and overprivilege findings won't fire
-for those records. Expansion reads three relationships per principal (owners, delegated grants,
-app-role assignments) plus one lookup per referenced resource, all issued through Microsoft
+for those records. Expansion reads four relationships per principal (owners, delegated grants,
+app-role assignments, directory-role membership) plus one lookup per referenced resource and a
+tenant-wide sign-in report, all issued through Microsoft
 Graph `$batch` (20 sub-requests per call) — so hundreds of principals finish in a couple of
 minutes rather than one `az rest` per read; `--no-expand` or `--filter <substring>` limit it.
 Agent identities (`ServiceIdentity`) are excluded — use the Entra Agent ID collector below, and
