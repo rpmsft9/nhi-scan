@@ -11,6 +11,16 @@ requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "Raj Penchala" }]
 keywords = ["non-human-identity", "nhi", "agentic-identity", "ai-agents", "iam", "owasp", "security"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Information Technology",
+  "Topic :: Security",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Operating System :: OS Independent",
+]
 dependencies = []
 
 [project.optional-dependencies]
@@ -22,6 +32,9 @@ nhi-scan = "nhiscan.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/rpmsft9/nhi-scan"
+Repository = "https://github.com/rpmsft9/nhi-scan"
+Issues = "https://github.com/rpmsft9/nhi-scan/issues"
+Changelog = "https://github.com/rpmsft9/nhi-scan/blob/main/CHANGELOG.md"
 
 [tool.setuptools]
 packages = ["nhiscan"]

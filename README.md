@@ -24,6 +24,30 @@ CSF 2.0, and 800-53).
 > privilege**, an **Okta** collector, a **~20× faster** enriched Entra gather via Graph `$batch`,
 > and full **Windows** support. See the **[CHANGELOG](CHANGELOG.md)** for the full history since v0.1.
 
+## Quickstart (30 seconds)
+
+```bash
+pip install nhi-scan                           # from PyPI
+# or from source:  git clone https://github.com/rpmsft9/nhi-scan && cd nhi-scan && pip install -e .
+
+nhi-scan scan examples/sample-inventory.json   # full Markdown risk report
+```
+
+Sample output:
+
+```
+# Non-Human Identity Risk Report
+**8** identities · **21** findings · **1** orphaned · **3** long-lived secrets
+
+| Tier        | Identities |
+| ----------- | ---------: |
+| 🔴 Critical | 3 |
+| 🟠 High     | 1 |
+| 🟡 Moderate | 4 |
+```
+
+Point it at a JSON inventory (or generate one with a collector — see [Collectors](#required-roles--permissions) below) and you get a tiered, OWASP-NHI-mapped report with a remediation for every finding. New here? Start with the story and field notes at **[rajpenchala.com](https://rajpenchala.com)**.
+
 ## Why this exists
 
 Discovery tools tell you *how many* secrets and service accounts you have. A CISO needs the next
@@ -64,9 +88,15 @@ handled — the collectors locate the CLI on `PATH` on every OS and read JSON BO
 ## Install
 
 ```bash
-pip install -e .            # core, zero third-party dependencies (JSON inventories)
-pip install -e '.[yaml]'    # + YAML inventory support
-pip install -e '.[dev]'     # + pytest
+pip install nhi-scan            # core, zero third-party dependencies (JSON inventories)
+pip install "nhi-scan[yaml]"    # + YAML inventory support
+```
+
+From source (for development / running the collectors):
+
+```bash
+git clone https://github.com/rpmsft9/nhi-scan && cd nhi-scan
+pip install -e '.[dev]'         # editable install + pytest
 ```
 
 ## Required roles & permissions
