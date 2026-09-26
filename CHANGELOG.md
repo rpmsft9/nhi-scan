@@ -7,6 +7,16 @@ with no LLM in the verdict path.
 The format follows [Keep a Changelog](https://keepachangelog.com/); this project uses semantic
 versioning.
 
+## [0.3.1] — Packaging & distribution
+
+### Added
+- **Published to PyPI** — install with `pip install nhi-scan`.
+- **"Quickstart (30 seconds)"** section in the README with sample output; PyPI-first install path.
+- **Automated releases** — a GitHub Actions workflow publishes to PyPI on a version tag using PyPI Trusted Publishing (OIDC; no stored token).
+
+### Changed
+- `pyproject.toml` metadata: added Trove classifiers and Repository/Issues/Changelog URLs.
+
 ## [0.3.0] — Collector enrichment & owner validity
 
 Since the last release, nhi-scan got materially better at telling *real* risk from noise —
